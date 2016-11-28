@@ -12,8 +12,8 @@ autot <- mutate(autot,l.malli = k.malli,
                 pono.3 = str_pad(pono.3, 3, side="left", pad="0")
                 )
 add.sums <- function (d) d %>%
-  left_join(autot.pono3 %>% group_by(merkki.malli) %>% summarise(N.mm = sum(N))) %>% 
-  left_join(autot.pono3 %>% group_by(pono.3) %>% summarise(N.pono3 = sum(N)))
+  left_join(d %>% group_by(merkki.malli) %>% summarise(N.mm = sum(N))) %>% 
+  left_join(d %>% group_by(pono.3) %>% summarise(N.pono3 = sum(N)))
   
 autot.pono3 <- 
   autot %>% filter(kaytto=="Yksityinen") %>% group_by(merkki.malli, pono.3) %>% summarise(N=n()) %>% 
