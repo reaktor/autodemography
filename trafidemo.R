@@ -8,7 +8,6 @@ library(gdata)
 library(RColorBrewer)
 library(lme4)
 library(corrplot)
-library()
 
 ##
 
@@ -55,7 +54,7 @@ m.kunta<-mutate(autot,ika=as.numeric(difftime(date,as.Date(kayttoonottopvm),unit
   select(kunta,ika,paikat,pituus,omamassa,leveys,iskutilavuus,leveys,kW,Co2,matkamittarilukema) %>% 
   group_by(kunta) %>% summarise_all(funs(mean(.,na.rm=TRUE),median(.,na.rm=TRUE)))
 
-year.limit=2009
+year.limit=1960
 
 auto.statistic<-function(autot,attrs=c("merkki","merkki.malli","kayttovoima","kori","vari"))
 {

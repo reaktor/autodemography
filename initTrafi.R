@@ -4,23 +4,23 @@ library(ggplot2)
 library(stringr)
 library(reshape2)
 
-working.directory<-"/Users/jhimberg/Projects/trafiOpenData"
+working.directory<-"~/Projects/autodemography"
 setwd(working.directory)
 
-map.trafi<-function(filepath="Data/16968-Koodisto_2015.csv", sep=";",fileEncoding="MAC") {
-  
-  koodisto<-read.csv(file=filepath,sep=sep,fileEncoding=fileEncoding,header = TRUE)
+load("Data/vaesto.RData")
+
+data.map.trafi <- function() {
+  koodisto<-read.csv(file="Data/16968-Koodisto_2015.csv",sep=";",fileEncoding="MAC",header = TRUE)
   
   # otetaan vain suomen kieli ja kivammat nimet
   # Ohjaamotyypin kohdalla PITKASELITE on suomeksi väärin, otetaan siinä lyhytselite
-  # valitaan kieleksi suomi
-  #
-  # Ajoneuvoryhmälle on muakavampi ottaa myös lyhytselite
+  # valitaan kieleksi suomie
+  # Ajoneuvoryhmälle on muakavampi ottaa myös leyhytselite
   
   # TRAFI: koodistoa... / lyhennetään nimiä > 
   
   map.koodit = c(
-    "Kuntien numerot ja nimet" = "kunta", 
+    #"Kuntien numerot ja nimet" = "kunta", 
     "Ajoneuvomerkit" = "merkki",  
     "Ajoneuvoluokkaa tarkempi luokittelu ajoneuvoille" = "ryhma", 
     "Direktiivien mukainen kooditus, jossa huomioitu myös kansalliset ajoneuvoluokat." = "luokka",
@@ -45,21 +45,14 @@ map.trafi<-function(filepath="Data/16968-Koodisto_2015.csv", sep=";",fileEncodin
            nimi=ifelse(kuvaus=="luokka",nimi.2, nimi)) %>%
     select(-nimi.2)
   
-  # datassa on ollut kunta 180, (Jyväskylän mlk) ja 841 (Temmes) joka on 
-  # suurimmaksi osaksi "Tyrnävä"
-  # lisätään kuntakoodi 841 : "Tyrnävä, 180: "Jyväskylä" (HUOM: koodit ovat ilmeisesti alunperin 
-  # uniikkeja; on myös automerkki 841, käytettävä aina kuvaus+koodi -paria
-  
-  koodit[dim(koodit)[1]+1,]<-c("kunta",841,"Tyrnävä")
-  koodit[dim(koodit)[1]+1,]<-c("kunta",180,"Jyväskylä")
-  koodit[dim(koodit)[1]+1,]<-c("kaytto","nul","x")
-  koodit[dim(koodit)[1]+1,]<-c("kaytto","","x")
-  koodit[dim(koodit)[1]+1,]<-c("kori","","x")
-  koodit[dim(koodit)[1]+1,]<-c("vari","","x")
+  koodit[dim(koodit)[1]+1,]<-c("kaytto","nul",NA)
+  koodit[dim(koodit)[1]+1,]<-c("kaytto","",NA)
+  koodit[dim(koodit)[1]+1,]<-c("kori","",NA)
+  koodit[dim(koodit)[1]+1,]<-c("vari","",NA)
   koodit[dim(koodit)[1]+1,]<-c("ryhma","26","Maastohenkilöauto")
   koodit[dim(koodit)[1]+1,]<-c("ryhma","508","Henkilöauto")
   koodit[dim(koodit)[1]+1,]<-c("ryhma","61","Selväkielisenä syötettävä nimitys")
-  koodit[dim(koodit)[1]+1,]<-c("ryhma",NA,"x")
+  koodit[dim(koodit)[1]+1,]<-c("ryhma",NA,NA)
   
   ## Kooditaulut
   map.trafi=list()
@@ -67,22 +60,8 @@ map.trafi<-function(filepath="Data/16968-Koodisto_2015.csv", sep=";",fileEncodin
     map.trafi[[i]] <-filter(koodit, kuvaus==i) %>% 
       transmute(., koodi = as.character(koodi), nimi=as.character(nimi))}
   
-  ## tehdään kuntien koodaus uudestaan: etunollat pois
-  
-  map.trafi[["kunta"]] <- filter(koodit, kuvaus=="kunta") %>% 
-    transmute(., koodi = as.character(as.numeric(as.character(koodi))), nimi=as.character(nimi));
-  
-  
   # vaihdetaan M1G-koodi
-  map.trafi[["luokka"]][["nimi"]][map.trafi[["luokka"]][["koodi"]]=="M1G"]<-"Henkilöauto.m"
-  
-  # vaihdetaan joitakin kuntakoodeja: tuntemattomat, ulkomaat ja Ahvenanmaa (åland-rekisteri on erikseen)
-  map.trafi[["kunta"]][["nimi"]][map.trafi[["kunta"]][["nimi"]] %in% 
-                                   c("Sottunga","Föglö", "Kumlinge", "Lumparland", "Sund", 
-                                     "Vårdö", "Hammarland", "Eckerö","Lemland", "Finström", 
-                                     "Geta", "Kökar","Saltvik","Jomala","Brändö","Maarianhamina", 
-                                     "Pohjoismaat","Ei vak asuinkuntaa","Ulkomaat","Tuntematon",NA)]<-"x"
-  
+  map.trafi[["luokka"]][["nimi"]][map.trafi[["luokka"]][["koodi"]]=="M1G"]<-"Henkilöauto (maasto)"
   
   ## lyhennellään värien koodauksia
   
@@ -90,14 +69,45 @@ map.trafi<-function(filepath="Data/16968-Koodisto_2015.csv", sep=";",fileEncodin
   
   ## lyhennellään käyttötavan koodausta # korjataan koodia
   map.trafi[["kaytto"]]["nimi"]<-gsub(" .*$","",map.trafi[["kaytto"]][["nimi"]])
-  return(map.trafi)}
+  # on char
+  map.trafi[["valitys"]]["koodi"]<-str_pad(map.trafi[["valitys"]][["koodi"]], 1, side="left", pad="0")
+  return(map.trafi)
+}
+
+# Trafi muuttujien uudeleenkoodausfunktio
+map.trafi<-function(var.nimi,orig.val, data=data.map.trafi()) {
+  mapvalues(orig.val,data[[var.nimi]][["koodi"]],data[[var.nimi]][["nimi"]])
+}
+  
+# vaihdetaan joitakin kuntakoodeja: tuntemattomat, ulkomaat ja Ahvenanmaa (åland-rekisteri on erikseen)
+#map.trafi[["kunta"]][["nimi"]][map.trafi[["kunta"]][["nimi"]] %in% 
+#                                 c("Sottunga","Föglö", "Kumlinge", "Lumparland", "Sund", 
+#                                   "Vårdö", "Hammarland", "Eckerö","Lemland", "Finström", 
+#                                   "Geta", "Kökar","Saltvik","Jomala","Brändö","Maarianhamina", 
+#                                   "Pohjoismaat","Ei vak asuinkuntaa","Ulkomaat","Tuntematon",NA)]<-NA
+
 
 ## Polttoaineiden uudelleenkoodausta
 
-map.polttoaine<-list()
-map.polttoaine$orig<-c("","Bensiini","Biodiesel","Biometaani","CNG","Dieselöljy","Etanoli","Etanoli (E85)","HL-ryhmän maakaasu","LPG","Sähkö")
-map.polttoaine$lyh<-c(NA,"Bensiini","Diesel","Kaasu","Kaasu","Diesel","Etanoli","Etanoli","Kaasu","Kaasu","Sähkö")
+map.polttoaine <- function(v) mapvalues(v,
+                                        c("Bensiini","Dieselöljy","Bensiini/Etanoli","Bensiini/CNG", "Sähkö", "CNG", "Bensiini/Sähkö", "", "Bensiini + moottoripetroli", "Muu","Bensiini/Puu", "Diesel/Biodiesel", "Bensiini/LPG", "Diesel/CNG", "Etanoli", "Etanoli (E85)",             "Diesel/Sähkö","Biometaani","Diesel/Biodiesel/CNG","HL-ryhmän maakaasu","LPG", "Puu","Vety"),
+                                        c("Bensiini","Diesel",    "Bensiini/Etanoli","Bensiini/CNG", "Sähkö", "CNG", "Bensiini/Sähkö", NA, "Bensiini",                   "Muu","Muu",          "Diesel",           "Muu",          "Muu",        "Bensiini/Etanoli", "Bensiini/Etanoli", "Muu","Muu","Muu","Muu", "Muu", "Muu", "Muu")
+                                        )
 
+map.kunta <- function(v) 
+  mapvalues(as.character(v),as.character(geo$kunta.vanhat2uudet$kuntano.old), 
+            as.character(geo$kunta.vanhat2uudet$kunta))
+
+map.kuntano <- function(v)
+  mapvalues(as.character(v),as.character(geo$kunta.vanhat2uudet$kuntano.old), 
+                  as.character(geo$kunta.vanhat2uudet$kuntano))
+
+map.korityyppi <- function(korityyppi) {
+kori=ifelse(korityyppi %in% c(NA,"Avoauto (AE)", "Coupé (AD)", "Farmari (AC)", 
+                              "Matkailuauto (SA)", "Monikäyttöajoneuvo (AF)", "Sedan (AA)", 
+                              "Umpikorinen (BB)", "Viistoperä (AB)"), korityyppi,"Muu")
+kori=gsub(" \\(.*$|ajoneuvo|auto","",kori)
+return(kori)}
 
 # korvataan low-arvoa pienemmät "repvaluella"
 limitl<-function(x,low,repvalue){ 
@@ -126,16 +136,15 @@ s.tab<-function(rownames, s, sep=" ",N=1) {
                     N= unlist(mapply(function(a,b) rep(a,b), N, l))))
 }
 
-nvl <- function(a,b){
+nvl <- function(a,b) {
   ifelse(is.na(a),b,a)
 }
 
-autovarikartta.map<-function(v) mapvalues(v,c("Valkoinen","Sininen","Musta","Harmaa",
+map.autovarikartta<-function(v) mapvalues(v,c("Valkoinen","Sininen","Musta","Harmaa",
                                     NA,"Punainen","Vihreä","Ruskea (beige)","Monivär.","Hopea","Keltainen","Violetti","Oranssi","Turkoosi"),
                               c("snow2","blue","black","gray","gray","red","green","brown","red","silver","yellow","purple","organge","cyan"))
 
-
-ikaluokka.map<-
+map.ikaluokka<-
   function(v) as.numeric(mapvalues(as.character(v), 
                         c("0-4",  "5-9",  "10-14","15-19","20-24",
                           "25-29","30-34","35-39","40-44","45-49",
@@ -145,16 +154,4 @@ ikaluokka.map<-
                           27,      32,     37,    42,      47,
                           52,      57,     62,    67,      72,
                           77,      82,     87,    91)))
-
-#n<-notmissing(select(autot,ends_with(".orig"),ryhma,k.malli,data),misvalues=c("",NA,"x"),
-#              c("data","kayttoonottoVuosi.orig")) %>% 
-#  mutate(N=1) %>% 
-#  mutate(kayttoonottoVuosi.orig=ifelse(kayttoonottoVuosi.orig<1960,1959,kayttoonottoVuosi.orig)) %>%
-#  group_by(kayttoonottoVuosi.orig,data) %>% 
-#  summarise_each(funs(sum)) %>%
-#  mutate_each(funs(./N),-N,-kayttoonottoVuosi.orig,-data) 
-#ggplot(data=melt(select(n,-N),id.vars=c("data","kayttoonottoVuosi.orig")), 
-#       aes(x=kayttoonottoVuosi.orig,y=value,color=data))+geom_line()+facet_wrap(~variable,scales="fixed")
-
-
 

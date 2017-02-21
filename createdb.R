@@ -1,79 +1,65 @@
+source("~/Projects/autodemography/initTrafi.R")
+
+files<-paste(working.directory,"/Data/",c("AvoinData_4.2.csv",
+              "AvoinData 4.3.csv",
+              "AvoinData20160101.csv",
+              "Ajoneuvot 4.6.csv",
+              "AvoinData 4.5.csv",
+              "AvoinData 4.7.csv",
+              "Tieliikenne AvoinData 4,8.csv"),sep="")
+
+datat <- list(file=files,
+              ext=c("4.2","4.3","4.4","4.6","4.5","4.7","4.8"),
+              sep=c(",",",",";",";",";",";",";"))
+
 # Luo tietokanta
-trafi.db <- src_sqlite("trafi.db", create = TRUE)
+trafi.db <- src_sqlite(paste(working.directory,"/trafi.db",sep=""), create=TRUE)
 
-# Avaa tietokanta
-#trafi.db <- src_sqlite("trafi.db", create = FALSE)
 
-datat <- list(file=c("/Users/jhimberg/Projects/trafiOpenData/Data/AvoinData_4.2.csv",
-         "/Users/jhimberg/Projects/trafiOpenData/Data/AvoinData 4.3.csv",
-         "/Users/jhimberg/Projects/trafiOpenData/Data/AvoinData20160101.csv",
-         "/Users/jhimberg/Projects/trafiOpenData/Data/Ajoneuvot 4.6.csv",
-         "/Users/jhimberg/Projects/trafiOpenData/Data/AvoinData 4.5.csv",
-         "/Users/jhimberg/Projects/trafiOpenData/Data/AvoinData 4.7.csv"),
-         ext=c("4.2","4.3","4.4","4.6","4.5","4.7"),
-         sep=c(",",",",";",";",";",";"))
+# Avaa tietokanta (lisää)
+#trafi.db <- src_sqlite(paste(working.directory,"/trafi.db",sep=""), create=FALSE)
+#add.data.n<-7
 
-for (z in datat$file) {
-f<-read.csv(file=z,header=TRUE,sep=datat[["sep"]][which(datat[["file"]] == z)]) %>%  
-  mutate(kayttoonotto = as.character(as.Date(as.character(kayttoonottopvm),"%Y%m%d")),
-         kayttoonottoVuosi = 
-           as.integer(substring(as.Date(as.character(kayttoonottopvm),"%Y"),1,4)),
-         kayttoonotto=ifelse(is.na(kayttoonottoVuosi),NA,kayttoonotto),
-         kayttoonotto.pvm.imputoitu = is.na(kayttoonotto),
-         kayttoonottopvm = ifelse(is.na(kayttoonotto),
-                                       paste(as.character(kayttoonottoVuosi),
-                                             "-06-30",sep=""),
-                                       as.character(as.Date(kayttoonotto,origin="1970-01-01"))),
-         ensirekisterointipvm = as.character(ensirekisterointipvm),
-         ensirekVuosi = as.integer(substring(as.Date(as.character(ensirekisterointipvm),"%Y"),1,4))
-  ) 
+for (z in datat$file) 
+  read.csv(file=z, header=TRUE,sep=datat[["sep"]][which(datat[["file"]] == z)],fileEncoding="latin1") %>% 
+  mutate(kayttoonottoVuosi = as.integer(str_sub(kayttoonottopvm,1,4)),
+         kayttoonottoVuosi = ifelse(kayttoonottoVuosi< 1900|kayttoonottoVuosi>2018,NA,kayttoonottoVuosi),
+         ensirekVuosi = as.integer(str_sub(ensirekisterointipvm,1,4)),
+         ensirekVuosi = ifelse(ensirekVuosi< 1900 | kayttoonottoVuosi>2018, NA, kayttoonottoVuosi),
+         max.date=max(as.character(ensirekisterointipvm), na.rm=TRUE) %>% as.character,
+         data=datat[["ext"]][which(datat[["file"]] == z)]) %>%
+  db_insert_into(trafi.db$con,"ajoneuvot",.)
 
-max.date<-max(f$ensirekisterointipvm,na.rm=TRUE) %>% as.character
+## Laske ajoneuvostatistiikat kaikille ajoneuvoluokille 
 
-mutate(f,merkkiSelvakielinen=iconv(merkkiSelvakielinen,from="latin1",to="UTF-8"),
-       mallimerkinta=iconv(mallimerkinta,from="latin1",to="UTF-8"), 
-       kunta=mapvalues(kunta,map.trafi()[["kunta"]][["koodi"]],map.trafi()[["kunta"]][["nimi"]]),
-       kunta=iconv(kunta,to="UTF-8"),
-       kaupallinenNimi=iconv(kaupallinenNimi,from="latin1","UTF-8"),
-       vaihteisto=as.character(mapvalues(vaihteisto,map.trafi()[["vaihteisto"]][["koodi"]],map.trafi()[["vaihteisto"]][["nimi"]])),
-       korityyppi=as.character(mapvalues(korityyppi,map.trafi()[["kori"]][["koodi"]],map.trafi()[["kori"]][["nimi"]])),
-       vari=as.character(mapvalues(vari,map.trafi()[["vari"]][["koodi"]],map.trafi()[["vari"]][["nimi"]])),
-       ajoneuvoluokka=as.character(mapvalues(ajoneuvoluokka,map.trafi()[["luokka"]][["koodi"]],map.trafi()[["luokka"]][["nimi"]])),
-       ajoneuvoryhma=as.character(mapvalues(ajoneuvoryhma,map.trafi()[["ryhma"]][["koodi"]],map.trafi()[["ryhma"]][["nimi"]])),
-       ajoneuvonkaytto=as.character(mapvalues(ajoneuvonkaytto,map.trafi()[["kaytto"]][["koodi"]],map.trafi()[["kaytto"]][["nimi"]])),
-       yksittaisKayttovoima=as.character(mapvalues(yksittaisKayttovoima,map.trafi()[["polttoaine"]][["koodi"]],map.trafi()[["polttoaine"]][["nimi"]])),
-       data=datat[["ext"]][which(datat[["file"]] == z)],
-       date=max.date) %>% 
-  db_insert_into(trafi.db$con,"trafi",.)
-}
-
-# Frekvenssitaulu kaikille ajoneuvoluokille voidaan tehdä näin
-trafi.db <- src_sqlite("trafi.db", create = FALSE)
-
-tbl(trafi.db,"trafi") %>% 
+if (db_has_table(trafi.db$con,"stat_ajoneuvot")) db_drop_table(trafi.db$con,"stat_ajoneuvot")
+tbl(trafi.db,"ajoneuvot") %>% 
   select(ajoneuvoluokka,
          ajoneuvoryhma,
          ajoneuvonkaytto,
-         kunta,alue,
+         kunta, alue,
          kayttoonottoVuosi,
          ensirekVuosi,
          data) %>%
   collect(n=Inf) %>% 
-  group_by(ajoneuvoluokka,
-           ajoneuvoryhma,
-           ajoneuvonkaytto,
-           kunta,alue,
-           kayttoonottoVuosi,
-           ensirekVuosi,
-           data) %>% 
-  summarise(N=n()) %>% 
-  ungroup %>% 
-  copy_to(trafi.db,.,"stat_ajoneuvoluokka",temporary=FALSE)
+  group_by(ajoneuvoluokka, ajoneuvoryhma, ajoneuvonkaytto, kunta, alue, kayttoonottoVuosi, ensirekVuosi, data) %>% 
+  summarise(N=n()) %>% ungroup %>% 
+  copy_to(trafi.db,.,"stat_ajoneuvot",temporary=FALSE)
 
-####
-# lasketaan tietojen olemassaolo 
+## indeksoinnit tauluille
+#CREATE INDEX luokka on ajoneuvot(ajoneuvoluokka);
+#CREATE INDEX data on ajoneuvot(data);
+#CREATE INDEX vuosi2 on ajoneuvot(kayttoonottoVuosi);
+#CREATE INDEX jarnro on ajoneuvot(jarnro);
 
+#CREATE INDEX hkaytto on henkiloautot(ajoneuvonkaytto);
+#CREATE INDEX hryhma on henkiloautot(ajoneuvoryhma);
+#CREATE INDEX hdata on henkiloautot(data);
+#CREATE INDEX hvuosi on henkiloautot(kayttoonottoVuosi);
+#CREATE INDEX hjarnro on henkiloautot(jarnro);
 
+#CREATE INDEX hhdata on henkiloautohistoria(data);
+#CREATE INDEX hhjarnro on henkiloautohistoria(jarnro);
 
 
 
