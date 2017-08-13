@@ -4,7 +4,7 @@ autot.data <-tbl(trafi.db,"henkiloautot") %>% filter(data %in% c("4.2","4.7")) %
   collect(n=Inf)
 
 
-n<-notmissing(autot.data,
+n<-notmissing(a %>% filter(kayttoonottoVuosi<2017),
               misvalues=c("",NA,"x"),
               c("data","kayttoonottoVuosi")) %>% 
   mutate(N=1) %>% 
@@ -14,7 +14,7 @@ n<-notmissing(autot.data,
   summarise_each(funs(sum)) %>%
   mutate_each(funs(./N), -N, -kayttoonottoVuosi, -data) 
 
-ggplot(data=melt(select(n,-N,-max.date),id.vars=c("data","kayttoonottoVuosi")), 
-       aes(x=kayttoonottoVuosi,y=value,color=data))+geom_line()+facet_wrap(~variable,scales="fixed")
+ggplot(data=melt(select(n,-N,-date),id.vars=c("data","kayttoonottoVuosi")), 
+       aes(x=kayttoonottoVuosi,y=value,color="data"))+geom_line()+facet_wrap(~variable,scales="fixed")
 
 

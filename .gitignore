@@ -2,6 +2,11 @@
 .Rhistory
 .RData
 .Ruserdata
+*.db
 Data/*
 *.RData
 misc/*
+test/*
+*.png
+*.pdf
+test*
