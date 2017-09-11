@@ -24,9 +24,12 @@ henkiloauto.historia <- tbl(trafi.db,"henkiloauto_historia") %>%
   filter(!is.na(record.id)) %>% 
   arrange(record.id, data) %>% 
   collect(n=Inf) %>%
-  fix.auto.historia %>% 
-  select(-kunta) %>%
-  mutate(data=factor(data)) %>% 
+  fix.auto.historia
+
+henkiloauto.historia <- 
+  select(henkiloauto.historia, -kunta,-alue)
+
+henkiloauto.historia <-   mutate(henkiloauto.historia, data=factor(data)) %>% 
   group_by(record.id) %>% 
   mutate(
          km.diff = matkamittarilukema - lag(matkamittarilukema),
@@ -34,7 +37,7 @@ henkiloauto.historia <- tbl(trafi.db,"henkiloauto_historia") %>%
          katsastettu = nvl(nvl(matkamittarilukema.orig) != lag(nvl(matkamittarilukema.orig))),
          kuntano.seuraava=lead(kuntano),
          kuntanimi.seuraava=lead(kuntanimi),
-         alue.seuraava=lead(alue),
+         pono.3.seuraava=lead(pono.3),
          ajoneuvonkaytto.seuraava=lead(ajoneuvonkaytto)
          ) %>% 
   ungroup %>%
@@ -55,7 +58,6 @@ henkiloauto.historia <-
                    matkamittari.date, 
                    matkamittarilukema),
             by=c("record.id","matkamittarilukema")) 
-
 
 # Merkitään autot, joilla negatiivinen kilometrimäärä kahden kerran välissä 
 # max.jdiff mittaa kuika paljon järjestysnumero on muuttunut. Suuri erotus tuntuu usein kielivän siitä että
@@ -179,8 +181,8 @@ H<-mutate(H,
          )
 
 henkiloauto.historia <- bind_rows(henkiloauto.historia,H) 
-henkiloauto.historia <- mutate(henkiloauto.historia, data.seuraava=ifelse(is.na(data.seuraava), NA, data.seuraava))
-         
+
+henkiloauto.historia<-select(henkiloauto.historia, -kunta,-alue,-N)         
 save(file="historia.RData",henkiloauto.historia,henkiloauto.historia.quality)
 
 if (db_has_table(trafi.db$con,"henkiloauto_historia_diff")) db_drop_table(trafi.db$con, "henkiloauto_historia_diff")
@@ -191,6 +193,3 @@ tmp <- DBI::dbSendStatement(con, "CREATE INDEX hhhdata on henkiloauto_historia_d
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hhhjarnro on henkiloauto_historia_diff(jarnro);")
 tmp <- DBI::dbSendStatement(con, 'CREATE INDEX hhhrid on henkiloauto_historia_diff("record.id");')
 DBI::dbDisconnect(con)
-rm
-
-save(file="historia.RData",henkiloauto.historia,henkiloauto.historia.quality)

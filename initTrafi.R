@@ -135,16 +135,125 @@ return(df)}
 
 # tasoitus lmerillä 
 
-naivi.p <- function(df, alue="pono.3",  N="sum.N") {
-  Y<-select_(df,alue)
-  for (i in names(select(df, -one_of(c(alue,N))))) {
-    f<-paste0( "cbind(`", i , "`," , N ,"-`", i ,"`) ~ (1|",alue,") + 1")
+lme.binom.p1 <- function(df, F1, N, eps=0) {
+  # df dataframe jossa countit ja muu data 
+  # F1 muuttuja jossa jako 1 (esim. alueet)
+  # N muuttuja jossa summat, esim. "N"
+  
+  Y <- select_(df, F1) 
+
+  alueet<-Y
+  
+  for (i in setdiff(names(df), c(F1,N))) {
     print(i)
-      m<-do.call("glmer", list(as.formula(f), data=as.name("df"), family=as.name("binomial")))
-      c<- 1/(1+exp(-(ranef(m)[[alue]] + summary(m)$coefficients[1])))
-      y<-data.frame(p=c[[1]], alue=dimnames(c[1])[[1]])
-      names(y)<-c(paste0(i,".p"),alue)
-      if (var(c[[1]])>0) Y<-merge(Y,y, by=alue)
+    f <- paste0( "cbind(`", i , "`," , N ,"-`", i ,"`) ~ (1|", F1,") + 1")
+    
+    if(var(df[[i]])>eps) {
+    m <- do.call("glmer", list(as.formula(f), data=as.name("df"), family=as.name("binomial")))
+    y <- data.frame(predict(m, alueet, type="response"))} else {
+      print(paste(i, "var is (almost) zero."))
+      y<-data.frame(a=rep(NA,dim(alueet)[1]))
+    }
+    
+    names(y)<-i 
+  
+    y[[F1]]<-alueet[[F1]]
+    Y<-merge(Y, y, by=F1)
+   
+  }
+  return(Y)
+}
+
+lme.p2 <- function(df, F1, F2, eps=0) {
+  # df dataframe jossa muuttuja ja jaot 
+  # F1 muuttuja jossa jako 1 (esim. alueet hierarkia 1)
+  # F2 muuttuja jossa jako 2 (esim. alueet hierarkia 2)
+
+  Y <- select_(df, F1, F2) 
+  
+  Y<-unique(Y)
+  alueet <- Y 
+
+  for (i in setdiff(names(df), c(F1,F2))) {
+    print(i)
+
+    f <- paste0(i, "~ (1|", F1,") + (1|", F2,")  + 1")
+    
+    if(var(df[[i]],na.rm=TRUE) > eps) {
+      m <- do.call("lmer", list(as.formula(f), data=as.name("df")))
+      y <- data.frame(predict(m, alueet, type="response"))} else {
+        print(paste(i, "var is (almost) zero."))
+        y<-data.frame(a=rep(NA, dim(alueet)[1]))
+      }
+
+        names(y)<-i 
+    y[[F1]] <- alueet[[F1]]
+    y[[F2]] <- alueet[[F2]]
+    Y<-merge(Y, y, by=c(F1,F2))
+    
+  }
+  return(Y)
+}
+
+
+lme.binom.p2 <- function(df, F1, F2, N, eps=0) {
+  # df dataframe jossa countit ja muu data 
+  # F1 muuttuja jossa jako 1 (esim. alueet hierarkia 1)
+  # F2 muuttuja jossa jako 2 (esim. alueet hierarkia 2)
+  # N muuttuja jossa summat (N) esim. "N"
+  
+  Y <- select_(df, F1, F2) 
+
+  alueet<-Y
+  
+  for (i in setdiff(names(df), c(F1,F2,N))) {
+    print(i)
+    f <- paste0( "cbind(`", i , "`," , N ,"-`", i ,"`) ~ (1|", F1,") + (1|", F2,")  + 1")
+    
+    if(var(df[[i]])>eps) {
+      m <- do.call("glmer", list(as.formula(f), data=as.name("df"), family=as.name("binomial")))
+      y <- data.frame(predict(m, alueet, type="response"))} else {
+        print(paste(i, "var is (almost) zero."))
+        y<-data.frame(a=rep(NA, dim(alueet)[1]))
+      }
+    
+    names(y)<-i 
+    y[[F1]] <- alueet[[F1]]
+    y[[F2]] <- alueet[[F2]]
+    Y<-merge(Y, y, by=c(F1,F2))
+    
+  }
+  return(Y)
+}
+
+lme.binom.p3 <- function(df, F1, F2, F3, N, eps=0) {
+  # df dataframe jossa countit ja muu data 
+  # F1 muuttuja jossa jako 1 (esim. alueet hierarkia 1)
+  # F2 muuttuja jossa jako 2 (esim. alueet hierarkia 2)
+  # F3 muuttuja jossa jako 2 (esim. alueet hierarkia 3)
+  # N muuttuja jossa summat (N) esim "N"
+  
+  Y <- select_(df, F1, F2, F3) 
+  
+  alueet<-Y
+  
+  for (i in setdiff(names(df), c(F1,F2,F3,N))) {
+    print(i)
+    f <- paste0( "cbind(`", i , "`," , N ,"-`", i ,"`) ~ (1|", F1,") + (1|", F2,")  + (1|", F3,")  + 1")
+    
+    if(var(df[[i]])>eps) {
+      m <- do.call("glmer", list(as.formula(f), data=as.name("df"), family=as.name("binomial")))
+      y <- data.frame(predict(m, alueet, type="response"))} else {
+        print(paste(i, "var is (almost) zero."))
+        y<-data.frame(a=rep(NA, dim(alueet)[1]))
+      }
+    
+    names(y)<-i 
+    y[[F1]] <- alueet[[F1]]
+    y[[F2]] <- alueet[[F2]]
+    y[[F3]] <- alueet[[F3]]
+    Y<-merge(Y, y, by=c(F1,F2,F3))
+    
   }
   return(Y)
 }
@@ -169,7 +278,16 @@ map.autovarikartta<-function(v) plyr::mapvalues(v,c("Valkoinen","Sininen","Musta
                               c("snow2","blue","black","gray","gray","red","green","brown","red","silver","yellow","purple","organge","cyan"))
 
 
-kartta <- function(df, aluejako="pono.3", title.label=NA, geo_=geo, color.map="PuBu", color.limits=c(NA,NA)) {
+
+map.pono2nimi <-function(v) plyr::mapvalues(v, demografia$postinumero$data$pono,
+  paste(demografia$postinumero$data$pono, plyr::mapvalues(demografia$postinumero$data$kuntano, 
+                         geo$kunta.vanhat2uudet$kuntano, 
+                         as.character(geo$kunta.vanhat2uudet$kunta), warn_missing=FALSE ), demografia$postinumero$data$nimi, sep="\n"),
+  warn_missing=FALSE)
+
+geo$pono.duukkis$nimi<-map.pono2nimi(geo$pono.duukkis$pono)
+
+kartta <- function(df, aluejako="pono.3", title.label=NA, geo_=geo, color.map="PuBu", color.limits=c(NA,NA), cut.NA=TRUE, tooltip=NA) {
   # yhdistää kartan ja datan; plottaa ensimmäisen muuttujan jonka nimi ei ole "alue" 
   geodata <- list()
   geodata[["pono.5"]] <- function(geo_) mutate(geo_$pono.duukkis, alue=pono) 
@@ -180,16 +298,29 @@ kartta <- function(df, aluejako="pono.3", title.label=NA, geo_=geo, color.map="P
   geodata[["kunta"]] <- function(geo_) mutate(geo_$kunta$"2017", alue=kuntano)
   geodata[["kartogrammi.kuntanimi"]] <- function(geo_) mutate(geo_$kunta$kartogrammi, alue=kuntanimi)
   geodata[["kartogrammi.kunta"]] <- function(geo_) mutate(geo_$kunta$kartogrammi, alue=kunta)
+  
+  
+  if(any(names(df) %in% names(geodata[[aluejako]]))) warning("df:n kenttänimissä on karttadata kenttänimiä")
   geodata <- left_join(geodata[[aluejako]](geo_), df, by="alue")
   
-  attr=names(select(df, -alue))[1] 
+  attr=setdiff(names(df), c("alue", tooltip))[1]
+  
+  if(is.na(tooltip)) 
+    if(aluejako %in% c("pono.5","pono.3","pono.2","pono.1")) tooltip <- "nimi" 
+  else 
+    tooltip<-"kuntanimi"
+  
+  print(head(geodata))
+  
   if(is.na(title.label)) title.label <- attr
+  if (cut.NA) geodata <- geodata[!is.na(geodata[[attr]]),]
   p <- ggplot(data=arrange(geodata, order), aes(x=long, y=lat))+ 
-    geom_polygon_interactive(aes_string(fill = attr, group="group", tooltip = "alue"), 
+    geom_polygon_interactive(aes_string(fill = attr, group = "group", tooltip = tooltip, 
+                                        data_id = "alue"), 
                              colour=NA)+
     theme_void()+theme(legend.title=element_blank())+ggtitle(title.label)
   
-  p <- p + scale_fill_gradientn(colours= brewer.pal(9,color.map), 
+  p <- p + scale_fill_gradientn(colours= brewer.pal(8,color.map), 
                                 values = NULL, 
                                 space = "Lab", 
                                 na.value = "grey50", 
@@ -220,12 +351,23 @@ kartta.animaatio <- function(df, aluejako="pono.3", geo_=geo, color.map="PuBu", 
   
   p <-ggplot(data=arrange(geodata,order), aes(x=long, y=lat, frame=aika))+ 
     geom_polygon_interactive(aes_string(fill=attr, group="group", tooltip="alue"), colour=NA)+
-    scale_fill_gradientn(colours= brewer.pal(9,color.map), values = NULL, space = "Lab", na.value = "grey50", 
+    scale_fill_gradientn(colours= brewer.pal(6,color.map), values = NULL, space = "Lab", na.value = "grey50", 
                          guide = "colourbar") + theme_void() +
     theme(legend.title=element_blank()) + ggtitle(title.label) 
   return(p)
 }
 
+kuntadata <- mutate(demografia$kunta$tunnusluku,
+                    kuntanimi=iconv(kuntanimi, to="UTF-8"), 
+                    kuntanimi=map.vanhat.kuntanimet(kuntanimi)) %>%
+  filter(kuntanimi!="KOKO MAA") 
+
+koko.maa <- filter(demografia$kunta$tunnusluku, kuntanimi=="KOKO MAA") 
+
+kunta.stat.vars <- names(select(demografia$kunta$tunnusluku,-vuosi,-kuntanimi))
+vuodet <- unique(demografia$kunta$tunnusluku$vuosi)
+karttatyyppi=list(label=c("tavallinen","kartogrammi"), 
+                  aluejako=c("kuntanimi","kartogrammi.kuntanimi"))
 
 attribute.count <- function(autot, attr="merkki", base="kuntanimi")
 { n<-group_by_(autot, base) %>% summarise(N=n()) %>% ungroup
@@ -256,7 +398,7 @@ auto.rank <-function(autot, attr="merkki", cf.limit=Inf, r.limit=Inf)
     mutate(cf=cumsum(N)/sum(N),df=N/sum(N))
 }  
 
-auto.statistic<-function(autot,attrs=c("merkki","merkki.l.malli","polttoaine","kori","vari"))
+auto.stat<-function(autot,attrs=c("merkki","merkki.l.malli","polttoaine","kori","vari"))
 {
   auto.stats<-list()
   for (a in attrs) auto.stats[[a]]<-auto.rank(autot,a) 
@@ -390,14 +532,14 @@ fix.co2 <-function(henkiloautot,korjaustiedosto.nn="Data/co2.stat.csv", co2.mall
   
   load(co2.malli)
   
+  # Jos Co2>0, polttoaine ei voi olla sähkö, jos polttoaine = sähkö ja co2 puutuu = 0
+  # Liitetään suoraan ne automallit+tilavuus joiden co2 2 yksikän sisällä, jos co2 puuttuu
+  
   henkiloautot <- mutate(henkiloautot,
                          Co2.orig=Co2,
                          Co2=ifelse(polttoaine == "Sähkö", 0, Co2),
-                         Co2=ifelse((polttoaine != "Sähkö") & (Co2 == 0), NA, Co2),
-                         Co2=ifelse(Co2 >700, NA,Co2))
-  
-  # Jos Co2>0, polttoaine ei voi olla sähkö, jos polttoaine = sähkö ja co2 puutuu = 0
-  # Liitetään suoraan ne automallit+tilavuus joiden co2 2 yksikän sisällä, jos co2 puuttuu
+                         Co2=ifelse((polttoaine != "Sähkö") & (Co2 < 15), NA, Co2),
+                         Co2=ifelse(Co2 > 700, NA,Co2))
   
   henkiloautot<-left_join(henkiloautot, filter(co2, co2.max-co2.min <= 2) %>% 
                             select(co2.nn,merkki,mallimerkinta,iskutilavuus),
@@ -413,13 +555,15 @@ fix.co2 <-function(henkiloautot,korjaustiedosto.nn="Data/co2.stat.csv", co2.mall
                                               polttoaine,
                                               kori) %>% data.matrix)
   
-  henkiloautot <- mutate(henkiloautot,
-                         Co2 = ifelse(!is.na(Co2.orig), Co2.orig, ifelse(is.na(Co2), Co2.modelled, Co2)),
-                         Co2=ifelse(polttoaine == "Sähkö", 0, Co2))
+  henkiloautot <- mutate(henkiloautot, Co2 = ifelse(is.na(Co2), Co2.modelled, Co2))
   
   return(henkiloautot)
   
 }
+
+est.matkamittarilukemat <- function(
+  
+)
 
 # Laske edellisen oletetun katsastuspäivämäärän jälkeinen kvartaalin viimeinen päivä
 

@@ -1,7 +1,7 @@
 # Data 
 # Data alunperin http://www.trafi.fi/tietopalvelut/avoin_data
 
-#source("~/Projects/autodemography/initTrafi.R")
+source("~/Projects/autodemography/initTrafi.R")
 
 trafi.db<- src_sqlite(paste(working.directory,"/trafi.db",sep=""), create=FALSE)
 
@@ -62,34 +62,31 @@ henkiloautot$combo = group_indices_(henkiloautot,.dots=combo.attribute)
 
 henkiloautot<- group_by(henkiloautot, combo) %>%
   mutate(N.combo = n(), 
-         historia = ifelse(length(unique(data)) == N.combo, T, F))
-
-henkiloautot<-ungroup(henkiloautot)
-
-henkiloautot<-mutate(henkiloautot, 
-
-          record.id = ifelse(historia, str_pad(combo, 8, side = "left", pad ="0"), NA))
+         historia = ifelse(length(unique(data)) == N.combo, T, F)) %>% 
+  ungroup %>% 
+  mutate(record.id = ifelse(historia, str_pad(combo, 8, side = "left", pad ="0"), NA))
 
 # otataan vielä ne joilla on uniikki alue ja mukana kaikissa datoissa 4.xx vain kerran
 
 h<-filter(henkiloautot, !historia)
 henkiloautot<-filter(henkiloautot, historia)
 
-combo.attribute<-unique(c(combo.attribute,"alue"))
-
 N.data=length(unique(henkiloautot$data))
+combo.attribute<-unique(c(combo.attribute, "alue"))
+
 
 h$t.id <- group_indices_(h, .dots=combo.attribute)
 
 h<- group_by(h,t.id) %>% 
-  mutate(N.t.id = length(unique(data)))
-
-h<-ungroup(h)
+  mutate(N.t.uniq.id = length(unique(data)), 
+         N.t.id = length(data)) %>% 
+  ungroup
 
 h<-mutate(h,
-    stabile.alue = ifelse(!historia & N.data == N.t.id, T, F),
+    stabile.alue = ifelse(N.data == N.t.id & N.data==N.t.uniq.id, T, F),
     historia = ifelse(N.data == N.t.id, T, F),
-    record.id = ifelse(stabile.alue, paste("1", alue, str_pad(combo, 7, side="left", pad="0"), sep=""), record.id),
+    record.id = ifelse(stabile.alue, paste("1", str_pad(alue,3, side="left", pad=0), 
+                                           str_pad(combo, 8, side="left", pad="0"), sep=""), record.id),
     historia = ifelse(!historia & stabile.alue, T, historia)
   ) 
 
@@ -100,7 +97,7 @@ henkiloautot <- bind_rows(henkiloautot,h) %>%
 rm(h)
 
 henkiloautot <- mutate(henkiloautot, 
-                       data=paste(str_sub(data,1,2),str_pad(str_sub(data,3,5),2,"left",pad="0"),sep=""))
+                       data=paste(str_sub(data,1,2),str_pad(str_sub(data,3,5), 2,"left", pad="0"),sep=""))
 
 henkiloauto.historia<-select(henkiloautot,
      record.id,
