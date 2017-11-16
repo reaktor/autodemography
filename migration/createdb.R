@@ -9,20 +9,22 @@ files<-paste(working.directory,"/Data/",c(
   "AvoinData 4.7.csv",
   "AvoinData4.8_uusi.csv",
   "Tieliikenne AvoinData 4.9.csv",
-  "Tieliikenne AvoinData 4.10.csv"
+  "Tieliikenne AvoinData 4.10.csv", 
+  "Tieliikenne 5.0.csv"
 ), sep="")
 
 datat <- list(file=files,
               ext=c(
-                "4.2",
-                "4.3",
-                "4.4",
-                "4.6",
-                "4.5",
-                "4.7",
-                "4.8",
-                "4.9",
-                "4.10"),
+                "4.02",
+                "4.03",
+                "4.04",
+                "4.06",
+                "4.05",
+                "4.07",
+                "4.08",
+                "4.09",
+                "4.10",
+                "5.00"),
               sep=c(",",
                     ",",
                     ";",
@@ -31,8 +33,9 @@ datat <- list(file=files,
                     ";",
                     ";",
                     ";",
-                    ";"
-              ))
+                    ";",
+                    ";")
+              )
 
 # Luo tietokanta
 #trafi.db <- src_sqlite(paste(working.directory,"/trafi.db",sep=""), create=TRUE)
@@ -44,7 +47,7 @@ liikaaVuosi <-2018
 
 #for (z in datat$file) 
 #{
-  z<- datat$file[9]
+  z<- datat$file[10]
   f<-  read.csv(file=z, header=TRUE,sep=datat[["sep"]][which(datat[["file"]] == z)],fileEncoding="latin1") 
   f<-  mutate(f,kayttoonottoVuosi = as.integer(str_sub(kayttoonottopvm,1,4)),
               kayttoonottoVuosi = ifelse(kayttoonottoVuosi< 1900|kayttoonottoVuosi> liikaaVuosi, NA, kayttoonottoVuosi),

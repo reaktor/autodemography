@@ -96,8 +96,9 @@ henkiloautot <- bind_rows(henkiloautot,h) %>%
 
 rm(h)
 
-henkiloautot <- mutate(henkiloautot, 
-                       data=paste(str_sub(data,1,2),str_pad(str_sub(data,3,5), 2,"left", pad="0"),sep=""))
+# Tätä ei tarvita enää
+#henkiloautot <- mutate(henkiloautot, 
+#                       data=paste(str_sub(data,1,2),str_pad(str_sub(data,3,5), 2,"left", pad="0"),sep=""))
 
 henkiloauto.historia<-select(henkiloautot,
      record.id,
