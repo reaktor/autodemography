@@ -5,8 +5,6 @@ library(Matrix)
 library(tidytext)
 library(xgboost)
 
-trafi.db<- src_sqlite("trafi.db") 
-
 autot <- tbl(trafi.db, "henkiloauto_uniqcombos") %>%
   select(
     #data,
@@ -105,8 +103,8 @@ malli.co2 <- xgboost(param=param,
                   verbose=TRUE)
 
 ## Malli ja taulukko talteen
-save(file="malli.co2.RData", malli.co2)
+save(file=full.path("malli.co2.RData"), malli.co2)
 
-write.table(co2, file="co2.stat.csv",quote=FALSE,
+write.table(co2, file=full.path("co2.stat.csv"),quote=FALSE,
             sep="\t",row.names=FALSE,fileEncoding="UTF-8",append=FALSE)
 

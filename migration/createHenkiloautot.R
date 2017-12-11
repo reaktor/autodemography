@@ -1,9 +1,7 @@
 # Data 
 # Data alunperin http://www.trafi.fi/tietopalvelut/avoin_data
 
-source("~/Projects/autodemography/initTrafi.R")
-
-trafi.db<- src_sqlite(paste(working.directory,"/trafi.db",sep=""), create=FALSE)
+#source("initTrafi.R")
 
 # Valitaan varsinaiset henkilöautot ja uudelleenkoodataan muuttujia
 
@@ -97,8 +95,8 @@ henkiloautot <- bind_rows(henkiloautot,h) %>%
 rm(h)
 
 # Tätä ei tarvita enää
-#henkiloautot <- mutate(henkiloautot, 
-#                       data=paste(str_sub(data,1,2),str_pad(str_sub(data,3,5), 2,"left", pad="0"),sep=""))
+henkiloautot <- mutate(henkiloautot, 
+                       data=paste(str_sub(data,1,2),str_pad(str_sub(data,3,5), 2,"left", pad="0"),sep=""))
 
 henkiloauto.historia<-select(henkiloautot,
      record.id,
@@ -161,13 +159,13 @@ tmp <- DBI::dbSendStatement(con, "CREATE INDEX hvryhma on henkiloauto_uniqcombos
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hvvuosi on henkiloauto_uniqcombos(kayttoonottoVuosi);")
 DBI::dbDisconnect(con)
 
-write.table(henkiloauto.historia, file="henkiloautot.txt",quote=FALSE,
+write.table(henkiloauto.historia, file=full.path("henkiloautot.txt"),quote=FALSE,
             sep="\t", na="", dec=".", row.names=FALSE, fileEncoding="UTF-8")
 
-write.table(henkiloauto.historia, file="henkiloauto_historia.txt",quote=FALSE,
+write.table(henkiloauto.historia, file=full.path("henkiloauto_historia.txt"),quote=FALSE,
             sep="\t", na="", dec=".", row.names=FALSE, fileEncoding="UTF-8")
 
-write.table(henkiloauto.uniikit, file="henkiloauto_uniqcombos.txt",quote=FALSE,
+write.table(henkiloauto.uniikit, file=full.path("henkiloauto_uniqcombos.txt"),quote=FALSE,
             sep="\t", na="", dec=".", row.names=FALSE, fileEncoding="UTF-8")
 
 

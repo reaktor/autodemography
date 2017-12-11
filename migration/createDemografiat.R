@@ -1,4 +1,4 @@
-
+library(here)
 library(dplyr)
 library(tidyr)
 library(stringr)
@@ -15,8 +15,8 @@ gpclibPermit()
 library(gisfin)
 library(gdata)
 
-working.directory<-"."
-setwd(working.directory)
+directory <- here()
+setwd(directory)
 
 # Haetan joitakin kunnittaisia ikätietoja
 ## 
@@ -206,5 +206,5 @@ demografia$postinumero$data<-rbind(paavo.5,paavo.aggr(paavo.5,3),
 
 demografia$postinumero$vars<-paavo.vars
 
-save(file="demografia.RData", demografia)
-save(file="geografia.RData", geo)
+save(file="Data/demografia.RData", demografia)
+save(file="Data/geografia.RData", geo)

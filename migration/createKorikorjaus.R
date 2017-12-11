@@ -1,10 +1,8 @@
+#source("initTrafi.R")
 
-#library(tidyr)
 library(Matrix)
 library(tidytext)
 library(xgboost)
-
-trafi.db <- src_sqlite("trafi.db")
 
 autot <- tbl(trafi.db, "henkiloauto_uniqcombos") %>%
   select(
@@ -111,30 +109,39 @@ train.index <- !is.na(malli$kori)
 kori.label <- as.numeric(as.factor(malli$kori[train.index])) - 1
 N.class <- max(kori.label) + 1
 
+# poistetaan kaikkein harvinaisimmat sanat & tehdään malli
+x.relevant.colidx <- colSums(x) > 4
+
 param <- list(
   "booster" = "gbtree", # tree
   "objective" = "multi:softprob", # multiclass classification
   "num_class" = N.class, # number of classes
   "eval_metric" = "merror", # evaluation metric
-  #"nthread" = 4,   # number of threads to be used
-  "max_depth" = 16, # maximum depth of tree
+  "nthread" = 4,   # number of threads to be used
+  "max_depth" = 8, # maximum depth of tree
   "silent" = 0,
-  "eta" = 0.5, # step size shrinkage
-  #"gamma" = 0,    # minimum loss reduction
-  "subsample" = 1    # part of data instances to grow tree
+  "eta" = 0.15, # step size shrinkage
+  "subsample" = 0.8   # part of data instances to grow tree
   #"colsample_bytree" = 1,  # subsample ratio of columns when constructing each tree
-  #"min_child_weight" = 1  # minimum sum of instance weight needed in a child
+  #"min_child_weight" = 0.1  # minimum sum of instance weight needed in a child
 )
 
-# poistetaan kaikkein harvinaisimmat sanat & tehdään malli
-x.relevant.colidx <- colSums(x) > 4
+#xgb.cv(param = param,
+#       data = x[train.index, x.relevant.colidx],
+#       label = kori.label,
+#       sample_weight = malli$N[train.index],
+#       nrounds = 55,
+#       prediction = TRUE,
+#       early_stopping_rounds = 3,
+#       verbose = TRUE, nfold=7, stratified=TRUE)
+
 
 malli.kori <- xgboost(
   param = param,
   data = x[train.index, x.relevant.colidx],
   label = kori.label,
   sample_weight = malli$N[train.index],
-  nrounds = 80,
+  nrounds = 55,
   prediction = TRUE,
   verbose = TRUE
 )
@@ -157,7 +164,7 @@ kori.korjaus <- select(malli,-ends_with("_p"),-ix,-N,-key) %>%
 
 write.table(
   kori.korjaus,
-  file = "korikorjaus.csv",
+  file = full.path("korikorjaus.csv"),
   quote = FALSE,
   sep = "\t",
   row.names = FALSE,

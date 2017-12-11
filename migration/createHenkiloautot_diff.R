@@ -1,14 +1,10 @@
 # Data 
 # Data alunperin http://www.trafi.fi/tietopalvelut/avoin_data
 
-source("~/Projects/autodemography/initTrafi.R")
+source("initTrafi.R")
 
 # Ajetaan merkkien/mallien korjaustiedosto!! luodaan skriptillä createMallitMerkitkorjaus.R
 # (Voidaan editoida käsin)
-
-#
-
-trafi.db<- src_sqlite(paste(working.directory,"/trafi.db",sep=""), create=FALSE)
 
 # Henkilöautot
 henkiloauto <- tbl(trafi.db,"henkiloauto_uniqcombos") %>% 

@@ -1,4 +1,4 @@
-source("~/Projects/autodemography/initTrafi.R")
+source("initTrafi.R")
 
 files<-paste(working.directory,"/Data/",c(
   "AvoinData_4.2.csv",
@@ -40,8 +40,6 @@ datat <- list(file=files,
 # Luo tietokanta
 #trafi.db <- src_sqlite(paste(working.directory,"/trafi.db",sep=""), create=TRUE)
 
-# Avaa tietokanta (lisää)
-trafi.db <- src_sqlite(paste(working.directory,"/trafi.db",sep=""), create=FALSE)
 
 liikaaVuosi <-2018
 

@@ -1,6 +1,6 @@
 
-working.directory<-"~/Projects/autodemography"
-setwd(working.directory)
+#working.directory<-"~/Projects/autodemography"
+#setwd(working.directory)
 
 # Kunnat v. 2017
 map.kunta <- function(v) 
@@ -40,7 +40,7 @@ nvl <- function(x,substit=0) {
   ifelse(is.na(x),substit,x)
 }
 
-kunnat.latlong<-read.csv(file="Data/kunnat_latlong.csv",sep="\t")
+kunnat.latlong<-read.csv(file=full.path("kunnat_latlong.csv"),sep="\t")
 
 map.ikaluokka<-
   function(v) as.numeric(plyr::mapvalues(as.character(v), 

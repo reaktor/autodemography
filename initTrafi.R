@@ -4,15 +4,20 @@ library(stringr)
 library(reshape2)
 library(tidyr)
 library(lubridate)
+library(here)
 
-working.directory<-"~/Projects/autodemography"
-setwd(working.directory)
+directory <- here()
 
+full.path <- function(file.name, data.path = "Data", wd = working.directory) paste(wd, data.path, file.name, sep="/")
+
+setwd(directory)
+
+trafi.db <- src_sqlite(paste(directory, "Data/trafi.db", sep = "", create = FALSE))
 
 source("initGeoDemografia.R")
 
-load("Data/geografia.RData")
-load("Data/demografia.RData")
+load(full.path("geografia.RData"))
+load(full.path("demografia.RData"))
 
 demografia$postinumero$suhteellinen <- demografia$postinumero$data %>%
   select(-starts_with("he_0")) %>% 
@@ -38,12 +43,13 @@ demografia$postinumero$suhteellinen <- demografia$postinumero$data %>%
   rename(alue=pono) %>% 
   mutate(vuosi=as.numeric(vuosi))
 
-load("Data/kunnat.kartogrammi.RData")
+load(full.path("kunnat.kartogrammi.RData"))
 geo$kunta$kartogrammi<-transmute(kunnat.kartogrammi,id,long,lat,order,hole,piece,group,kunta,kuntanimi=iconv(kuntanimi,to="UTF-8"))
 rm(kunnat.kartogrammi)
 
 data.map.trafi <- function() {
-  koodisto<-read.csv(file="Data/16968-Koodisto_2015.csv",sep=";",fileEncoding="MAC",header = TRUE)
+  
+  koodisto<-read.csv(file = full.path("16968-Koodisto_2015.csv"), sep=";",fileEncoding="MAC",header = TRUE)
   
   # otetaan vain suomen kieli ja kivammat nimet
   # Ohjaamotyypin kohdalla PITKASELITE on suomeksi väärin, otetaan siinä lyhytselite
@@ -195,7 +201,6 @@ lme.p2 <- function(df, F1, F2, eps=0) {
   return(Y)
 }
 
-
 lme.binom.p2 <- function(df, F1, F2, N, eps=0) {
   # df dataframe jossa countit ja muu data 
   # F1 muuttuja jossa jako 1 (esim. alueet hierarkia 1)
@@ -277,8 +282,7 @@ map.autovarikartta<-function(v) plyr::mapvalues(v,c("Valkoinen","Sininen","Musta
                                     NA,"Punainen","Vihreä","Ruskea (beige)","Monivär.","Hopea","Keltainen","Violetti","Oranssi","Turkoosi"),
                               c("snow2","blue","black","gray","gray","red","green","brown","red","silver","yellow","purple","organge","cyan"))
 
-
-
+# Postinumerosta alueen nimi
 map.pono2nimi <-function(v) plyr::mapvalues(v, demografia$postinumero$data$pono,
   paste(demografia$postinumero$data$pono, plyr::mapvalues(demografia$postinumero$data$kuntano, 
                          geo$kunta.vanhat2uudet$kuntano, 
@@ -309,8 +313,6 @@ kartta <- function(df, aluejako="pono.3", title.label=NA, geo_=geo, color.map="P
     if(aluejako %in% c("pono.5","pono.3","pono.2","pono.1")) tooltip <- "nimi" 
   else 
     tooltip<-"kuntanimi"
-  
-  print(head(geodata))
   
   if(is.na(title.label)) title.label <- attr
   if (cut.NA) geodata <- geodata[!is.na(geodata[[attr]]),]
@@ -464,7 +466,7 @@ fix.auto.historia <- function(henkiloauto.historia)
          pono.3=str_pad(alue, 3, side="left", pad="0")) %>% 
   return
 
-fix.merkki.malli <- function(henkiloautot, korjaustiedosto = "Data/mallitmerkkikorjaus.csv")
+fix.merkki.malli <- function(henkiloautot, korjaustiedosto = full.path("mallitmerkkikorjaus.csv"))
 {
   korjaus <- read.csv(korjaustiedosto, quote="", fileEncoding = "UTF-8",sep="\t", stringsAsFactors = FALSE) %>%
     mutate_if(is.character,iconv,to="UTF-8") %>% 
@@ -490,7 +492,7 @@ fix.merkki.malli <- function(henkiloautot, korjaustiedosto = "Data/mallitmerkkik
     return
 }
 
-fix.kori <- function(henkiloauto, korjaustiedosto="Data/korikorjaus.csv")
+fix.kori <- function(henkiloauto, korjaustiedosto=full.path("korikorjaus.csv"))
 {  
   ### Täydennetään puuttuvat koritiedot: 
   ### fix.merkit.mallit on ajettava ensin, samoin fix.attribuutit (kori oltava)
@@ -519,7 +521,7 @@ fix.kori <- function(henkiloauto, korjaustiedosto="Data/korikorjaus.csv")
             by=c("combo"))  %>% return
 }
 
-fix.co2 <-function(henkiloautot,korjaustiedosto.nn="Data/co2.stat.csv", co2.malli="Data/malli.co2.RData")
+fix.co2 <-function(henkiloautot,korjaustiedosto.nn=full.path("co2.stat.csv"), co2.malli=full.path("malli.co2.RData"))
 {
   
   ### Täydennetään puuttuvat Co2 -tiedot 
@@ -561,9 +563,7 @@ fix.co2 <-function(henkiloautot,korjaustiedosto.nn="Data/co2.stat.csv", co2.mall
   
 }
 
-est.matkamittarilukemat <- function(
-  
-)
+#est.matkamittarilukemat <- function()
 
 # Laske edellisen oletetun katsastuspäivämäärän jälkeinen kvartaalin viimeinen päivä
 
