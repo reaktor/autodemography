@@ -4,9 +4,7 @@
 
 # otatan vain henkilöautot
 
-#source("~/Projects/autodemography/initTrafi.R")
-
-trafi.db <- src_sqlite(paste(working.directory, "/trafi.db", sep = ""))
+#source("initTrafi.R")
 
 autot <- tbl(trafi.db, "henkiloauto_uniqcombos") %>%
   select(
