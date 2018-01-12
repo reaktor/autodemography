@@ -391,7 +391,9 @@ cont<-filter(cont.data, aluejako=="pono.3" & ryhma=="Normaali" & ajoneuvonkaytto
   select(-aluejako, -ryhma, -ajoneuvonkaytto) %>% rename(pono.3=alue)
 
 data <- left_join(data.3, Topics, by=c("pono.3","date")) %>% 
-  left_join(., cont, by=c("pono.3","date")) 
+  left_join(., cont, by=c("pono.3","date")) %>% 
+  select(-sum.N)
+
  # mutate(pinta_ala=pinta_ala/1e6,
  #         asukastiheys=he_vakiy/pinta_ala, 
  #         autoja.per.asukas=N/he_vakiy, 
