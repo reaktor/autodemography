@@ -1,7 +1,7 @@
 # Data 
 # Data alunperin http://www.trafi.fi/tietopalvelut/avoin_data
 
-source("initTrafi.R")
+#source("initTrafi.R")
 
 # Ajetaan merkkien/mallien korjaustiedosto!! luodaan skriptillä createMallitMerkitkorjaus.R
 # (Voidaan editoida käsin)
@@ -25,7 +25,8 @@ henkiloauto.historia <- tbl(trafi.db,"henkiloauto_historia") %>%
 henkiloauto.historia <- 
   select(henkiloauto.historia, -kunta,-alue)
 
-henkiloauto.historia <-   mutate(henkiloauto.historia, data=factor(data)) %>% 
+henkiloauto.historia <-   mutate(henkiloauto.historia, 
+                                 data=factor(data)) %>% 
   group_by(record.id) %>% 
   mutate(
          km.diff = matkamittarilukema - lag(matkamittarilukema),
@@ -177,14 +178,12 @@ H<-mutate(H,
          )
 
 henkiloauto.historia <- bind_rows(henkiloauto.historia,H) 
-
-henkiloauto.historia<-select(henkiloauto.historia, -kunta,-alue,-N)         
-save(file="historia.RData",henkiloauto.historia,henkiloauto.historia.quality)
+henkiloauto.historia <- select(henkiloauto.historia, -kunta,-alue,-N)         
 
 if (db_has_table(trafi.db$con,"henkiloauto_historia_diff")) db_drop_table(trafi.db$con, "henkiloauto_historia_diff")
 as.data.frame(henkiloauto.historia) %>% db_insert_into(trafi.db$con, "henkiloauto_historia_diff",.)
 
-con <- DBI::dbConnect(RSQLite::SQLite(), paste(working.directory,"/trafi.db",sep=""))
+con <- DBI::dbConnect(RSQLite::SQLite(), full.path("trafi.db"), sep="")
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hhhdata on henkiloauto_historia_diff(data);")
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hhhjarnro on henkiloauto_historia_diff(jarnro);")
 tmp <- DBI::dbSendStatement(con, 'CREATE INDEX hhhrid on henkiloauto_historia_diff("record.id");')

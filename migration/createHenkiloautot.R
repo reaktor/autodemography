@@ -1,7 +1,7 @@
 # Data 
 # Data alunperin http://www.trafi.fi/tietopalvelut/avoin_data
 
-#source("initTrafi.R")
+source("initTrafi.R")
 
 # Valitaan varsinaiset henkilöautot ja uudelleenkoodataan muuttujia
 
@@ -96,7 +96,7 @@ rm(h)
 
 # Tätä ei tarvita enää
 henkiloautot <- mutate(henkiloautot, 
-                       data=paste(str_sub(data,1,2),str_pad(str_sub(data,3,5), 2,"left", pad="0"),sep=""))
+                       data=paste(str_sub(data,1,2),str_pad(str_sub(data,3,5), 2, "left", pad="0"),sep=""))
 
 henkiloauto.historia<-select(henkiloautot,
      record.id,
@@ -134,7 +134,7 @@ henkiloauto.uniikit <- group_by(henkiloautot, combo) %>%
 if (db_has_table(trafi.db$con,"henkiloautot")) db_drop_table(trafi.db$con, "henkiloautot")
 as.data.frame(henkiloautot) %>% db_insert_into(trafi.db$con, "henkiloautot",.)
 
-con <- DBI::dbConnect(RSQLite::SQLite(), paste(working.directory,"/trafi.db",sep=""))
+con <- DBI::dbConnect(RSQLite::SQLite(), full_path(trafi.db),sep=""))
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hkaytto on henkiloautot(ajoneuvonkaytto);")
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hdata on henkiloautot(data);")
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hvuosi on henkiloautot(kayttoonottoVuosi);")
@@ -145,7 +145,7 @@ DBI::dbDisconnect(con)
 if (db_has_table(trafi.db$con,"henkiloauto_historia")) db_drop_table(trafi.db$con, "henkiloauto_historia")
 as.data.frame(henkiloauto.historia) %>% db_insert_into(trafi.db$con, "henkiloauto_historia",.)
 
-con <- DBI::dbConnect(RSQLite::SQLite(), paste(working.directory,"/trafi.db",sep=""))
+con <- DBI::dbConnect(RSQLite::SQLite(), full.path("trafi.db") ,sep="")
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hhdata on henkiloauto_historia(data);")
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hhjarnro on henkiloauto_historia(jarnro);")
 tmp <- DBI::dbSendStatement(con, 'CREATE INDEX hhrid on henkiloauto_historia("record.id");')
@@ -154,7 +154,7 @@ DBI::dbDisconnect(con)
 if (db_has_table(trafi.db$con,"henkiloauto_uniqcombos")) db_drop_table(trafi.db$con, "henkiloauto_uniqcombos")
 as.data.frame(henkiloauto.uniikit) %>% db_insert_into(trafi.db$con, "henkiloauto_uniqcombos",.)
 
-con <- DBI::dbConnect(RSQLite::SQLite(), paste(working.directory,"/trafi.db",sep=""))
+con <- DBI::dbConnect(RSQLite::SQLite(), full.path("trafi.db") ,sep="")
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hvryhma on henkiloauto_uniqcombos(ajoneuvoryhma);")
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hvvuosi on henkiloauto_uniqcombos(kayttoonottoVuosi);")
 DBI::dbDisconnect(con)

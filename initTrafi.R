@@ -8,11 +8,11 @@ library(here)
 
 directory <- here()
 
-full.path <- function(file.name, data.path = "Data", wd = working.directory) paste(wd, data.path, file.name, sep="/")
+full.path <- function(file.name, data.path = "Data", wd = directory) paste(wd, data.path, file.name, sep="/")
 
 setwd(directory)
 
-trafi.db <- src_sqlite(paste(directory, "Data/trafi.db", sep = "", create = FALSE))
+trafi.db <- src_sqlite(full.path("trafi.db"), create = FALSE)
 
 source("initGeoDemografia.R")
 
@@ -231,6 +231,41 @@ lme.binom.p2 <- function(df, F1, F2, N, eps=0) {
   return(Y)
 }
 
+lme.binom.p2.xcov <- function(df, F1, F2, N, x, eps=0) {
+  # df dataframe jossa countit ja muu data 
+  # F1 (str) df:n sarakkeen nimi, muuttuja jossa jako 1 (esim. alueet hierarkia 1)
+  # F2 (str) df:n sarakkeen nimi, muuttuja, jossa jako 2 (esim. alueet hierarkia 2)
+  # N (str) df:n sarakkeen nimi, muuttuja jossa summat (N) esim. "N"
+  # x (str) df:n sarakkeen nimi jossa kovariaatti 1
+  
+  Y <- select_(df, F1, F2, x) 
+  
+  alueet.cov <- Y
+  
+  for (i in setdiff(names(df), c(F1, F2, N, x))) {
+    print(i)
+    f <- paste0( "cbind(`", i , "`," , N ,"-`", i ,"`) ~ (1|", F1,") + (1|", F2,")  + (`", x, "`|", F1,") + (`", x, "`|", F2,")  + 1")
+    
+    if(var(df[[i]]) > eps) {
+      m <- do.call("glmer", list(as.formula(f), data=as.name("df"), family=as.name("binomial")))
+      y <- data.frame(predict(m, alueet.cov, type="response"))} else {
+        print(paste(i, "var is (almost) zero."))
+        y<-data.frame(a=rep(NA, dim(alueet)[1]))
+      }
+    
+    names(y) <- i 
+    y[[F1]] <- alueet[[F1]]
+    y[[F2]] <- alueet[[F2]]
+    Y<-merge(Y, y, by=c(F1,F2))
+    
+  }
+  return(Y)
+}
+
+# (N,i) ~ (x|F1) + (x|F2) + (1|F1) + (1|F2) + x + 1
+# (N,i) ~ (x+1|F1) + (x+1|F2) + x + 1
+
+
 lme.binom.p3 <- function(df, F1, F2, F3, N, eps=0) {
   # df dataframe jossa countit ja muu data 
   # F1 muuttuja jossa jako 1 (esim. alueet hierarkia 1)
@@ -264,6 +299,7 @@ lme.binom.p3 <- function(df, F1, F2, F3, N, eps=0) {
 }
 
 # puuttuuko arvo (misvalues) vai ei 
+
 notmissing<-function(z,misvalues=NA, nomis=NA) {
   misvalues<-cbind(misvalues,NA);
   m<-lapply(z[,!(names(z) %in% nomis)], function(x) {!(x %in% misvalues)}) 

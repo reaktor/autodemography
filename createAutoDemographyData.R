@@ -1,7 +1,8 @@
 # Data 
 # Data alunperin http://www.trafi.fi/tietopalvelut/avoin_data
 
-source("initTrafi.R")
+
+source(here::here("initTrafi.R"))
 
 # Ajetaan merkkien/mallien korjaustiedosto!! luodaan skriptillä createMallitMerkitkorjaus.R
 # (Voidaan editoida käsin)
@@ -20,8 +21,6 @@ library(ggiraph)
 
 ##
 
-trafi.db<- src_sqlite(paste(working.directory,"/trafi.db",sep=""), create=FALSE)
-
 henkiloauto <- tbl(trafi.db,"henkiloauto_uniqcombos") %>% 
   collect(n=Inf) %>% 
   mutate(merkki.orig=merkkiSelvakielinen, 
@@ -33,6 +32,7 @@ henkiloauto <- tbl(trafi.db,"henkiloauto_uniqcombos") %>%
   select(combo,  
          N.combo, 
          kayttoonottoVuosi, 
+         kayttoonottopvm,
          ensirekVuosi, 
          ajoneuvoluokka, 
          ajoneuvoryhma, 
@@ -61,21 +61,22 @@ henkiloauto <- tbl(trafi.db,"henkiloauto_uniqcombos") %>%
 
 # Laatu
 
-group_by(henkiloauto, kori.orig=toupper(kori.orig), kori.est) %>% summarise(N=sum(N.combo)) %>% spread(.,key=kori.orig,N, fill=0) %>% View
+#group_by(henkiloauto, kori.orig=toupper(kori.orig), kori.est) %>% summarise(N=sum(N.combo)) %>% spread(.,key=kori.orig,N, fill=0) %>% View
 #filter(henkiloauto, !(polttoaine != "Sähkö" & Co2.orig<20)) %>% mutate(d=abs(Co2.orig-Co2.modelled)) %>% ggplot(aes(x=Co2.orig,y=d))+geom_smooth()
-filter(henkiloauto, !(polttoaine != "Sähkö" & Co2.orig < 20)) %>% mutate(d=abs(Co2.orig-Co2.modelled), D=abs(Co2.orig-Co2.modelled)/(Co2.modelled)) %>% .$D %>%
-quantile(.,c(.95,.99,1), na.rm=TRUE)
+#filter(henkiloauto, !(polttoaine != "Sähkö" & Co2.orig < 20)) %>% mutate(d=abs(Co2.orig-Co2.modelled), D=abs(Co2.orig-Co2.modelled)/(Co2.modelled)) %>% .$D %>%
+#quantile(.,c(.95,.99,1), na.rm=TRUE)
 #mean(abs(henkiloauto$Co2.orig-henkiloauto$Co2.modelled), na.rm=TRUE)
 
 henkiloauto.historia <-tbl(trafi.db,"henkiloauto_historia_diff") %>% 
-  select(-km.diff) %>%
-  collect(n=Inf) 
+  collect(n=Inf) %>% 
+  select(-kayttoonottopvm)
 
 henkiloauto.historia <- left_join(henkiloauto.historia, 
                                   select(henkiloauto, 
                                          combo, 
+                                         kayttoonottopvm,
                                          kayttoonottoVuosi, 
-                                         ensirekVuosi, 
+                                         ensirekVuosi,
                                          vari, 
                                          ryhma, 
                                          kori,
@@ -98,30 +99,21 @@ henkiloauto.historia <- left_join(henkiloauto.historia,
 
 henkiloauto.historia <- filter(henkiloauto.historia, !is.ahvenanmaa(kuntanimi))
 
+s <- auto.stat(filter(henkiloauto.historia, ryhma=="Normaali" & kayttoonottoVuosi > 2006 & data=="5.00"))
 
-s<-auto.stat(filter(henkiloauto.historia, ryhma=="Normaali" & kayttoonottoVuosi > 2006 & data=="5.00"))
-
-historia<-select(henkiloauto.historia, 
-                             -katsastus.Q, 
-                             -matkamittari.date.laatu, 
-                             -ensirekisterointipvm, 
-                             -kayttoonottopvm,
-                             -ensirekVuosi) %>%
-  mutate(
+historia <- mutate(henkiloauto.historia,
           uusi=ifelse(kayttovuodet <= 0.25, T, F),
           polttoaine=ifelse(polttoaine %in% c("Bensiini","Diesel","Sähkö"), polttoaine, "muupolttoaine"),
-          merkki.a=merkki,
-          mallli.a=malli,
+          merkki.kaikki=merkki,
+          malli.kaikki=malli,
           merkki=ifelse(merkki %in% s$merkki$merkki[1:45], merkki, "muumerkki"), 
-          malli=ifelse(merkki.l.malli %in% s$merkki.l.malli$merkki.l.malli[1:45], 
+          malli=ifelse(merkki.l.malli %in% s$merkki.l.malli$merkki.l.malli[1:200], 
                        merkki.l.malli, ifelse(merkki != "muumerkki", paste0(merkki,"_muu"), "muumerkki")),
-          merkki.kori.polttoaine=paste0(merkki, tolower(kori), tolower(polttoaine), sep="."),
-          pono.2=str_sub(pono.3,1,2), 
-          rekisteriero.v=kayttovuodet-rekisterivuodet)
+          merkki.kori.polttoaine=paste(merkki, tolower(kori), tolower(polttoaine), sep="."),
+          pono.2=str_sub(pono.3,1,2))
 
-
-rm(henkiloauto.historia)
-rm(henkiloauto)
+#rm(henkiloauto.historia)
+#rm(henkiloauto)
 
 ## Jatkuvia arvoja
   
@@ -228,10 +220,10 @@ rm(henkiloauto)
   Vari.2 <- trafi.freq(historia, attr = "vari", c("date", "pono.2", "ryhma", "ajoneuvonkaytto")) %>% add.pono.1
   
 
-save(historia, file="historia.RData")
-save(cont.data.all, cont.data, file="cont.data.RData")    
-save(Merkki.2, Malli.2, Kori.2, Polttoaine.2, Vari.2, 
-     Merkki.3, Malli.3, Kori.3, Polttoaine.3, Vari.3, file = "autodata.RData")
+save(historia, file=full.path("historia.RData"))
+
+save(cont.data.all, cont.data, Merkki.2, Malli.2, Kori.2, Polttoaine.2, Vari.2, 
+     Merkki.3, Malli.3, Kori.3, Polttoaine.3, Vari.3, file = full.path("autodata.2.RData"))
   
 #  Naivi hierarkkinen binomitn  
   
@@ -272,7 +264,29 @@ save(Merkki.2, Malli.2, Kori.2, Polttoaine.2, Vari.2,
     }
     return(p)
   }
+
   
+  p.binom.k <- function(N.data, dates = "2017-09-30") {
+    p <- c()
+    for (d in dates) {
+      print(d)
+      p <- bind_rows(p,
+                     mutate(date = d,
+                            lme.binom.p3(
+                              filter(
+                                N.data,
+                                date == d &
+                                  !is.na(pono.2) & !is.na(kuntanimi)
+                              ) %>%
+                                select(-date,-ajoneuvonkaytto,-ryhma), "pono.2", "pono.3", "kuntanimi", "sum.N")
+                     ))
+    }
+    return(p)
+  }
+  
+  
+dates=unique(historia$date)
+
 Merkki.pono.3 <- p.binom.2(Merkki.3$N %>% filter(ajoneuvonkaytto=="Yksityinen" & ryhma=="Normaali"), dates)
 Malli.pono.3 <- p.binom.2(Malli.3$N %>% filter(ajoneuvonkaytto=="Yksityinen" & ryhma=="Normaali"), dates)
 Kori.pono.3 <- p.binom.2(Kori.3$N %>% filter(ajoneuvonkaytto=="Yksityinen" & ryhma=="Normaali"), dates)
@@ -311,80 +325,92 @@ data.3 <- select(Merkki.pono.3, -pono.2) %>%
   left_join(., rename(vaesto.3, pono.3=alue), by="pono.3") %>% select(-Muu) %>%
   rename(Merkki_muu=muumerkki.x, Merkkimalli_muu=muumerkki.y)
 
-#lda.merkki <- LDA(select(filter(Merkki.3$N, date=="2017-09-30" & ajoneuvonkaytto=="Yksityinen" & ryhma=="Normaali"), -ajoneuvonkaytto, -ryhma, -date, -starts_with("pono"), -sum.N), k = 6, control=list(verbose=1),method="Gibbs")
-#lda.malli <- LDA(select(filter(Malli.3$N, date=="2017-09-30" & ajoneuvonkaytto=="Yksityinen" & ryhma=="Normaali"), 
-#                        -ajoneuvonkaytto, -ryhma, -date, -starts_with("pono"), -sum.N), k = 7, control=list(verbose=1))
 
 save(Kori.pono.2, Malli.pono.2, Vari.pono.2, Polttoaine.pono.2, Merkki.pono.3, 
      Kori.pono.3, Malli.pono.3, Vari.pono.3, Polttoaine.pono.3, Merkki.pono.2, 
-     lda.merkki, lda.malli, 
-     vaesto.2, vaesto.3, file="autostats.RData" )
+     data.2, data.3, vaesto.2, vaesto.3, file=full.path("autostats.RData"))
 
-load("autostats.RData")
 
 write.table(select(Kori.2$N, -pono.1) %>% rename(tietopuuttuu=`<NA>`), 
-            file="Kori_pono2_N.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+            file=full.path("Kori_pono2_N.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
 
-write.table(select(Malli.2$N, -pono.1),
-            file="Malli_pono2_N.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+write.table(select(Malli.2$N, -pono.1, -ends_with("_muu"), -starts_with("muu")),
+            file=full.path("Malli_pono2_N.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
 
 write.table(select(Merkki.2$N, -pono.1), 
-            file="Merkki_pono2_N.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+            file=full.path("Merkki_pono2_N.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
 
 write.table(select(Polttoaine.2$N, -pono.1), 
-            file="Polttoaine_pono2_N.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+            file=full.path("Polttoaine_pono2_N.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
 
 write.table(select(Vari.2$N, -pono.1) %>% rename(tietopuuttuu=`<NA>`), 
-            file="Vari_pono2_N.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+            file=full.path("Vari_pono2_N.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
 
 
 write.table(select(Kori.3$N, -pono.2) %>% rename(tietopuuttuu=`<NA>`), 
-            file="Kori_pono3_N.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+            file=full.path("Kori_pono3_N.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
 
-write.table(select(Malli.3$N, -pono.2), 
-            file="Malli_pono3_N.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+write.table(select(Malli.3$N, -pono.2, -ends_with("_muu"), -starts_with("muu")), 
+            file=full.path("Malli_pono3_N.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
 
 write.table(select(Merkki.3$N, -pono.2), 
-            file="Merkki_pono3_N.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+            file=full.path("Merkki_pono3_N.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
 
 write.table(select(Polttoaine.3$N, -pono.2), 
-            file="Polttoaine_pono3_N.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+            file=full.path("Polttoaine_pono3_N.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
 
 write.table(select(Vari.3$N, -pono.2) %>% rename(tietopuuttuu=`<NA>`), 
-            file="Vari_pono3_N.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+            file=full.path("Vari_pono3_N.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
 
-write.table(data.3 , file="data3_yksityinen_normaali.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
-write.table(data.2, file="data2_yksityinen_normaali.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+write.table(select(data.3,-ends_with("_muu"), -starts_with("muu")) , file=full.path("data3_yksityinen_normaali.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+write.table(select(data.2, -ends_with("_muu"), -starts_with("muu")), file=full.path("data2_yksityinen_normaali.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
 
-write.table(cont.data, file="jatkuvat.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
-write.table(cont.data.all, file="jatkuvat_kaikki.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+write.table(cont.data, file=full.path("jatkuvat.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
+write.table(cont.data.all, file=full.path("jatkuvat_kaikki.tsv"), sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
 
-
-write.table(historia, file="trafi_henkiloautot.tsv", sep="\t", col.names=TRUE, row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
-
-
-
-#Topics <- as.data.frame(posterior(lda.malli)$topics)
-#names(Topics) <- paste0("T",names(Topics))
-#Topics <- bind_cols(select(filter(Malli.3$N, date=="2017-09-30" & ryhma=="Normaali" & ajoneuvonkaytto=="Yksityinen"), 
-#                           ajoneuvonkaytto, ryhma, date, pono.2, pono.3, sum.N), Topics)
-
-Topics$max.topic<-topics(lda.malli)
+write.table(historia, file=full.path("trafi_henkiloautot.tsv"), sep="\t", col.names=TRUE, 
+            row.names=FALSE, fileEncoding="UTF-8", dec=".", quote=FALSE, na="")
 
 
-kartta(select(filter(Merkki.pono.2, date %in% c("2015-09-30","2017-09-30")) %>% group_by(pono.3) %>% arrange(date) %>% 
+###
+
+lda.merkki <- LDA(select(filter(Merkki.3$N, date=="2017-09-30" & ajoneuvonkaytto=="Yksityinen" & ryhma=="Normaali"), 
+                         -ajoneuvonkaytto, -ryhma, -date, -starts_with("pono"), -sum.N), k = 6, control=list(verbose=1), method="Gibbs")
+
+lda.malli <- LDA(select(filter(Malli.3$N, date == "2017-09-30" & ajoneuvonkaytto == "Yksityinen" & ryhma=="Normaali"), 
+                        -ajoneuvonkaytto, -ryhma, -date, -starts_with("pono"), -sum.N), k = 5, control=list(verbose=1), method="Gibbs")
+
+
+Topics <- as.data.frame(posterior(lda.malli)$topics)
+names(Topics) <- paste0("T",names(Topics))
+Topics <- bind_cols(select(filter(Malli.3$N, date=="2017-09-30" & ryhma=="Normaali" & ajoneuvonkaytto=="Yksityinen"), 
+                           ajoneuvonkaytto, ryhma, date, pono.2, pono.3, sum.N), Topics)
+Terms<-as.data.frame(posterior(lda.malli)$terms)
+
+cont<-filter(cont.data, aluejako=="pono.3" & ryhma=="Normaali" & ajoneuvonkaytto=="Yksityinen") %>% 
+  select(-aluejako, -ryhma, -ajoneuvonkaytto) %>% rename(pono.3=alue)
+
+data <- left_join(data.3, Topics, by=c("pono.3","date")) %>% 
+  left_join(., cont, by=c("pono.3","date")) 
+ # mutate(pinta_ala=pinta_ala/1e6,
+ #         asukastiheys=he_vakiy/pinta_ala, 
+ #         autoja.per.asukas=N/he_vakiy, 
+ #         km.per.asukas=total.km/he_vakiy,
+ #        Co2.per.asukas=total.Co2.kg/he_vakiy)
+
+
+kartta(select(filter(Merkki.pono.2, date %in% c("2015-09-30","2017-09-30")) %>% group_by(pono.2) %>% arrange(date) %>% 
                 mutate_if(is.numeric, function(x) lead(x)-x), FORD, alue=pono.2), aluejako="pono.2")
 
-ggiraph(print(kartta(select(filter(Kori.2$f, date=="2015-06-30" & ryhma=="Normaali" & ajoneuvonkaytto=="Yksityinen"),alue=pono.2, Farmari), aluejako="pono.2")))
-
-ggiraph(print(kartta(select(filter(data.3, date=="2016-09-30"), alue=pono.3, Viistoperä), aluejako="pono.3")))
+ggiraph(print(kartta(select(filter(data.3, date=="2017-09-30"), alue=pono.3, VOLVO_S90), aluejako="pono.3")))
 
 
 X<-left_join(select(Topics, -pono.2, -ryhma, -date,-ajoneuvonkaytto, alue=pono.3), vaesto.3, by="alue") %>% 
   left_join(., Merkki.3, by="pono.3")
                                                                                                                       
                                                                                                                     
-cor(select_if(X,is.numeric),use="na.or.complete") %>% corrplot(.,order="hclust", hclust.method="ward.D2")
+cor(select_if(data.3,is.numeric),use="na.or.complete") %>% corrplot(.,order="hclust", hclust.method="ward.D2")
+
 ggiraph(print(kartta(Topics %>% select(alue=pono.3, T1), aluejako="pono.3")))
 
 ggiraph(print(kartta(select(vaesto.3, alue, he_kika), aluejako="pono.3")))
@@ -392,15 +418,17 @@ ggiraph(print(kartta(select(vaesto.3, alue, he_kika), aluejako="pono.3")))
 
 ### Kartta   
 alue.jako="pono.2"    
+
 kartta(select(cont.data, km, date, alue, ryhma, ajoneuvonkaytto, aluejako) %>% 
          filter(aluejako == alue.jako, date=="2016-12-31" & ryhma=="Normaali" & ajoneuvonkaytto=="Yksityinen") %>% 
          select(-date, -ryhma, -ajoneuvonkaytto), aluejako=alue.jako)
 
 
-  
 autodata <-left_join(select(Topics,-pono.2,-data), rename(vaesto, pono.3=alue), by="pono.3") %>% left_join(p, by="pono.3")
   
-ggiraph(print(kartta(select(filter(Vari$f, date=="2015-06-30" & alue.jako=), alue=pono.3, Valkoinen), aluejako="pono.3")))
+ggiraph(print(kartta(select(filter(cont.data.all, date=="2015-06-30" & alue.jako="pono.3"), alue=pono.3, Valkoinen), aluejako="pono.3")))
+
+filter(demografia$postinumero$data, vuosi==2017 & pono.level==5) %>% select(pono, kuntano, nimi) %>% mutate(pono.3=str_sub(pono,1,3), kuntanimi=map.kunta(kuntano)) %>% group_by(pono.3) %>% summarise(kuntanimi=paste(sort(unique(kuntanimi)),collapse=";"), nimi=paste(sort(unique(nimi)),collapse=";")) %>% View
 
 #q <- lme.p2(filter(yksityiset, data=="4.10") %>% select(suurinNettoteho, pono.2, pono.3) %>% 
 #              filter(!is.na(suurinNettoteho) & !is.na(pono.2)  & !is.na(pono.3) ), "pono.2", "pono.3")
@@ -408,10 +436,10 @@ ggiraph(print(kartta(select(filter(Vari$f, date=="2015-06-30" & alue.jako=), alu
 #merkki.cor<-select_if(filter(p,data=="4.10"), is.numeric) %>% select_if(., function(x) var(x)>0) %>% cor
 #dist.cor<-sqrt(1-merkki.cor)
 
-d<-sqrt(1-cor(select_if(select(Malli.pono.3,-pono.2),is.numeric), use="pairwise.complete.obs"))
+d<-sqrt(1-cor(select_if(select(filter(Malli.pono.3, date=="2017-09-30"), -pono.2), is.numeric), use="pairwise.complete.obs"))
 
-tsne(d, perplexity=40, k=2, max_iter=8000, whiten=TRUE) %>%
+tsne(d, perplexity=30, k=2, max_iter=3000, whiten=TRUE) %>%
   data.frame(.) %>% transmute(x=X1,y=X2, merkki=rownames(d)) %>%
   ggplot(., aes(x=x,y=y,label=merkki)) + 
-  geom_text(size=4)
+  geom_text(size=3)
 
