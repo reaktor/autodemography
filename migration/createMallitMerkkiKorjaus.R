@@ -307,7 +307,8 @@ a <-
   count(autot, merkki, k.malli, malli, k.malli.orig, malli.orig) %>% 
   ungroup
 
-# Poista merkki mallinimistä
+# Poista merkki mallinimistä #####
+
 a$k.malli <-
   mapply(function(x, y)
     gsub(paste0("\\b",x,"\\b"), "", y, ignore.case = TRUE),
@@ -321,6 +322,7 @@ a$malli <-
     a$merkki,
     a$malli,
     USE.NAMES = FALSE)
+
 
 ## Korjataan mallit ja tehdään niistä "key" = välilyönnit pois...
 
@@ -406,7 +408,23 @@ autot <- left_join(autot, mallit.merkki.korjaus, by = c("merkki", "k.malli.orig"
 
 korjaus <- count(autot, merkki.orig, malli.orig, k.malli.orig, merkki, k.malli) %>% ungroup
 
+korjaus.bak<-korjaus
+### Korjataan yleisimpiä detaljeja
+
+# RANGE-ROVERin kirjoitusasu
 korjaus <- mutate(korjaus, k.malli = ifelse(k.malli == "RANGE ROVER", "RANGE-ROVER", k.malli))
+
+# Mini Cooperin variantit 
+korjaus <- mutate(korjaus, k.malli=ifelse(merkki == "MINI" & grepl("COOPER", k.malli), "COOPER", k.malli))
+
+# Porschen S erote lopussa
+korjaus <- mutate(korjaus, k.malli=ifelse(merkki == "PORSCHE", gsub(" S$", "", k.malli), k.malli))
+
+#Mazdan liimautunut numero
+korjaus <- mutate(korjaus, k.malli=ifelse(merkki == "MAZDA", gsub("MAZDA", "", k.malli), k.malli))
+korjaus <- mutate(korjaus, k.malli=ifelse(merkki == "NISSAN", gsub("LEAF 30KWH", "LEAF", k.malli), k.malli))
+korjaus <- mutate(korjaus, k.malli=ifelse(merkki == "OPEL", gsub("ASTRA TWIN", "ASTRA", k.malli), k.malli))
+korjaus <- mutate(korjaus, k.malli=ifelse(merkki == "VOLVO", gsub("XC90 T8", "XC90", k.malli), k.malli))
 
 if (db_has_table(trafi.db$con, "mallitmerkkikorjaus"))
   db_drop_table(trafi.db$con, "mallitmerkkikorjaus")
