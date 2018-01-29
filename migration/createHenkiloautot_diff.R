@@ -1,7 +1,7 @@
 # Data 
 # Data alunperin http://www.trafi.fi/tietopalvelut/avoin_data
 
-#source("initTrafi.R")
+source("initTrafi.R")
 
 # Ajetaan merkkien/mallien korjaustiedosto!! luodaan skriptillä createMallitMerkitkorjaus.R
 # (Voidaan editoida käsin)

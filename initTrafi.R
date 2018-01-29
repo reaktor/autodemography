@@ -4,10 +4,8 @@ library(stringr)
 library(reshape2)
 library(tidyr)
 library(lubridate)
-library(here)
 
-directory <- here()
-
+directory <- here::here()
 full.path <- function(file.name, data.path = "Data", wd = directory) paste(wd, data.path, file.name, sep="/")
 
 setwd(directory)

@@ -33,6 +33,7 @@ henkiloautot<-mutate(autot.orig,
   select(-kayttoonotto)
 
 rm(autot.orig)
+gc()
 
 henkiloautot <- 
   mutate(henkiloautot, 
@@ -134,7 +135,7 @@ henkiloauto.uniikit <- group_by(henkiloautot, combo) %>%
 if (db_has_table(trafi.db$con,"henkiloautot")) db_drop_table(trafi.db$con, "henkiloautot")
 as.data.frame(henkiloautot) %>% db_insert_into(trafi.db$con, "henkiloautot",.)
 
-con <- DBI::dbConnect(RSQLite::SQLite(), full_path(trafi.db),sep=""))
+con <- DBI::dbConnect(RSQLite::SQLite(), full.path("trafi.db"),sep="")
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hkaytto on henkiloautot(ajoneuvonkaytto);")
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hdata on henkiloautot(data);")
 tmp <- DBI::dbSendStatement(con, "CREATE INDEX hvuosi on henkiloautot(kayttoonottoVuosi);")

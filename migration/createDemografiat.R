@@ -145,12 +145,13 @@ for (v in vaalit) {
   vaali[[v$vaali]]$N<-rowSums(select(vaali[[v$vaali]],-kuntano))
 }
 
-demografia$kunta$vaali<-vaali
+demografia$kunta$vaali <- vaali
 
 #
 #### Postinumeroaluedatat ja tarkka postinumeroaluekartta
 
-paavo<-rbind(get.geo("postialue:pno_tilasto_2017"),
+paavo<-bind_rows(get.geo("postialue:pno_tilasto_2018"), 
+             get.geo("postialue:pno_tilasto_2017"),
              get.geo("postialue:pno_tilasto_2016"),
              get.geo("postialue:pno_tilasto_2015"))
 
@@ -171,14 +172,14 @@ select(-id,-long,-lat,-order,-hole,-piece,-group,-namn) %>%
 mutate(pono=as.character(pono), pono.level=5,
        kuntano=as.character(kuntano),
        nimi=iconv(nimi,from="latin1",to="UTF-8")) %>% 
-mutate_if(is.numeric,function(x) ifelse(x==-1,NA,x))
+mutate_if(is.numeric,function(x) ifelse(x==-1,NA,x)) %>% select(-objectid)
 
 # Painotus väkiluvun mukaan
 wmean<-function(x,y) return(weighted.mean(x,ifelse(is.na(y),0,y),na.rm=T))
 
-paavo.aggr <- function(d,i,attr="pono", vars=paavo.vars)
+paavo.aggr <- function(d, i, vars=paavo.vars)
   group_by(d, vuosi, pono=str_sub(pono,1,i)) %>% 
-  select(pono,vuosi,one_of(filter(vars,aggr=="sum")$koodi)) %>% 
+  select(pono, vuosi, one_of(filter(vars, aggr=="sum")$koodi)) %>% 
   summarise_all(sum, na.rm=TRUE) %>% 
   left_join(.,
             group_by(d, vuosi,pono=str_sub(pono,1,i)) %>% 
@@ -196,15 +197,41 @@ paavo.aggr <- function(d,i,attr="pono", vars=paavo.vars)
                         pono.level=i,
                         nimi=NA
                         ),
-            by=c("vuosi","pono")) %>% as.data.frame
+            by=c("vuosi","pono")) %>% 
+  as.data.frame
+
+paavo.aggr.kunta.pono <- function(d, i, vars=paavo.vars)
+  group_by(d, vuosi, pono=str_sub(pono,1,i), kuntano) %>% 
+  select(pono, vuosi, one_of(filter(vars, aggr=="sum")$koodi), kuntano) %>% 
+  summarise_all(sum, na.rm=TRUE) %>% 
+  left_join(.,
+            group_by(d, vuosi, pono=str_sub(pono,1,i), kuntano) %>% 
+              summarise(he_kika=wmean(he_kika,he_vakiy),
+                        hr_ktu=wmean(hr_ktu,hr_tuy),
+                        hr_mtu=wmean(hr_mtu,hr_tuy),
+                        te_takk=wmean(te_takk,te_taly),
+                        te_as_valj=wmean(te_as_valj,te_taly),
+                        tr_ktu=wmean(tr_ktu,tr_kuty),
+                        tr_mtu=wmean(tr_mtu,tr_kuty),
+                        ra_as_kpa=wmean(ra_as_kpa,ra_asunn),
+                        euref_x=wmean(euref_x,pinta_ala),
+                        euref_y=wmean(euref_y,pinta_ala),
+                        pono.level=i*10+i,
+                        nimi=NA
+              ),
+            by=c("vuosi","pono", "kuntano")) %>% 
+  as.data.frame
+
 
 ### Lasketaan keskiarvot ja summat Paavo datalle pono3 ja pono3
 
-demografia$postinumero$data<-rbind(paavo.5,paavo.aggr(paavo.5,3),
+demografia$postinumero$data<-bind_rows(paavo.5,paavo.aggr(paavo.5,3),
                              paavo.aggr(paavo.5,2),
-                             paavo.aggr(paavo.5,1))
+                             paavo.aggr(paavo.5,1),
+                             paavo.aggr.kunta.pono(paavo.5,3),
+                             paavo.aggr.kunta.pono(paavo.5,2))
 
 demografia$postinumero$vars<-paavo.vars
 
-save(file="Data/demografia.RData", demografia)
+save(file="Data/demografia.2.RData", demografia)
 save(file="Data/geografia.RData", geo)

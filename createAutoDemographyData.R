@@ -522,7 +522,6 @@ X<-left_join(select(Topics, -pono.2, -ryhma, -date,-ajoneuvonkaytto, alue=pono.3
                                                                                                                       
 ggiraph(print(kartta(select(vaesto.3, alue, he_kika), aluejako="pono.3")))
 
-
 ### Kartta   
 alue.jako="pono.2"    
 
