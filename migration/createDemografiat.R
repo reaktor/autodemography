@@ -31,6 +31,18 @@ get.geo <-function(data.name="tilastointialueet:kunta4500k_2017",name.ext=".shp"
   return(sp2df(readShapeSpatial(paste(tempdir(),"/",str_split_fixed(data.name,pattern=":",n=2)[2],name.ext,sep=""))))
 }
 
+get.geo.sf <-function(data.name="tilastointialueet:kunta4500k_2017", name.ext=".shp") {
+  data.file=paste(tempdir(),"/",str_split_fixed(data.name,pattern=":",n=2)[2],sep="")
+  url.head <- "http://geo.stat.fi/geoserver/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName="
+  url.tail <- "&outputFormat=SHAPE-ZIP"
+  zip.file <- paste(tempdir(),"/","shape.zip",sep="")
+  curl_download(paste(url.head,data.name, url.tail,sep=""), zip.file)
+  unzip(zip.file,exdir=tempdir())  
+  return(sf::st_read(paste(tempdir(),"/", str_split_fixed(data.name,pattern=":",n=2)[2],name.ext,sep="")))
+}
+
+#http://geo.stat.fi/geoserver/postialue/wfs?service=WFS&request=GetCapabilities&version=1.0.0.
+
 geo<-list()
 
 ## Duukkiksen redusoitu postinumerokattadata haettu erikseen
@@ -41,6 +53,9 @@ pnro.sp <- rgdal::readOGR(dsn = kml.file, layer = layer.name)
 pnro.sp@data <- pnro.sp@data[1]
 names(pnro.sp@data) <- "pnro"
 pnro.sp@data$pnro <- as.character(pnro.sp@data$pnro)
+
+z<-cleangeo::clgeo_Clean(pnro.sp)
+z<-sf::st_as_sf(z)
 
 geo$pono.duukkis <- sp2df(pnro.sp) %>% 
   rename(pono=pnro)
@@ -60,7 +75,7 @@ for (y in c("2017"))
                        mutate(kuntanimi=map.vanhat.kuntanimet(kuntanimi)))
 
 # Vanhat kunnat vuoden 2017 kuntiin; tehty käsin tilastokeskuksen datasta
-kunnat<-read.csv(file="Data/kunnat2017.csv",fileEncoding="MAC",sep=";")
+kunnat<-read.csv(file="Data/kunnat2017.csv", fileEncoding="MAC",sep=";")
 
 # Kuntien koodaus vanhasta uuteen
 geo$kunta.vanhat2uudet<-merge(select(kunnat,kunta,kunta.old,kuntano.old),
@@ -132,7 +147,7 @@ for (v in vaalit) {
   names(vaali[[v$vaali]])<-gsub(" ","\\.",names(vaali[[v$vaali]]))
   
   vaali[[v$vaali]] <- filter(vaali[[v$vaali]], 
-                             Puolueiden.kannatus=="Ääniä yhteensä" & Puolue!="Yhteensä" & Sukupuoli=="Kaikki ehdokkaat" & grepl("^[0-9][0-9][0-9]",Alue)) %>% mutate(kuntano=substr(Alue,1,3),kuntanimi=substr(Alue,5,100)) %>% 
+                             Puolueiden.kannatus=="Ääniä yhteensä" & Putolue!="Yhteensä" & Sukupuoli=="Kaikki ehdokkaat" & grepl("^[0-9][0-9][0-9]",Alue)) %>% mutate(kuntano=substr(Alue,1,3),kuntanimi=substr(Alue,5,100)) %>% 
     select(Puolue, value=values, kuntano, kuntanimi) %>% 
     spread(.,Puolue,value,fill=0) %>% 
     mutate(kuntano=map.kuntano(kuntano)) %>% 
@@ -147,7 +162,9 @@ for (v in vaalit) {
 
 demografia$kunta$vaali <- vaali
 
-#
+
+ZZ<-rmapshaper::ms_filter_islands(z, min_area=400000)
+
 #### Postinumeroaluedatat ja tarkka postinumeroaluekartta
 
 paavo<-bind_rows(get.geo("postialue:pno_tilasto_2018"), 

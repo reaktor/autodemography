@@ -11,7 +11,8 @@ files<-paste(here::here("Data"),c(
   "Tieliikenne AvoinData 4.9.csv",
   "Tieliikenne AvoinData 4.10.csv", 
   "Tieliikenne 5.0.csv",
-  "tieliikenne 5.1.csv"
+  "tieliikenne 5.1.csv",
+  "Tieliikenne 5.2.csv"
 ), sep="/")
 
 datat <- list(file=files,
@@ -26,9 +27,11 @@ datat <- list(file=files,
                 "4.09",
                 "4.10",
                 "5.00",
-                "5.01"),
+                "5.01",
+                "5.02"),
               sep=c(",",
                     ",",
+                    ";",
                     ";",
                     ";",
                     ";",
@@ -68,8 +71,9 @@ datat <- list(file=files,
 liikaaVuosi <- 2019
 
 # 11 => 5.01
-z<- datat$file[11]
+z<- datat$file[12]
 f<-  read.csv(file=z, header=TRUE,sep=datat[["sep"]][which(datat[["file"]] == z)],fileEncoding="latin1") 
+
 f<-  mutate(f,kayttoonottoVuosi = as.integer(str_sub(kayttoonottopvm,1,4)),
               kayttoonottoVuosi = ifelse(kayttoonottoVuosi< 1900|kayttoonottoVuosi> liikaaVuosi, NA, kayttoonottoVuosi),
               ensirekVuosi = as.integer(str_sub(ensirekisterointipvm,1,4)),

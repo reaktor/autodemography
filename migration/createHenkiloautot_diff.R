@@ -19,7 +19,7 @@ henkiloauto <- tbl(trafi.db,"henkiloauto_uniqcombos") %>%
 henkiloauto.historia <- tbl(trafi.db,"henkiloauto_historia") %>% 
   filter(!is.na(record.id)) %>% 
   arrange(record.id, data) %>% 
-  collect(n=Inf) %>%
+  collect(n = Inf) %>%
   fix.auto.historia
 
 henkiloauto.historia <- 
