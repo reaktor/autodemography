@@ -1,116 +1,93 @@
-#source("initTrafi.R")
+source("initTrafi.R")
 
 library(Matrix)
-library(tidytext)
 library(xgboost)
 
-autot <- tbl(trafi.db, "henkiloauto_uniqcombos") %>%
-  select(
-    #data,
-    #jarnro,
+autot <- tbl(trafi.db, "autotiedot") %>%
+  transmute(
     merkkiSelvakielinen,
     kaupallinenNimi,
     mallimerkinta,
-    variantti,
-    omamassa,
-    versio,
     korityyppi,
-    N.id = N.combo
+    combination.id,
+    N.combinations
   ) %>%
-  collect(n = Inf) %>%
-  fix.merkki.malli
+  collect(n = Inf)
 
 ###
 
-autot <- mutate(autot, korityyppi = map.korityyppi(korityyppi))
+autot <- mutate(autot, kori = map.korityyppi(korityyppi))
 
-# Lasketaan korityypit per merkki-malli 
+# Lasketaan korityypit per merkki - malli 
 malli <-
-  group_by(autot, merkki, malli, mallimerkinta, korityyppi) %>%
-  summarise(n = n()) %>%
+  group_by(autot, 
+           merkkiSelvakielinen, 
+           kaupallinenNimi, 
+           mallimerkinta, 
+           kori) %>%
+  summarise(nn = sum(N.combinations)) %>%
   dcast(
-    merkki + malli + mallimerkinta ~ korityyppi,
+    merkkiSelvakielinen + kaupallinenNimi + mallimerkinta ~ kori,
     fun.aggregate = sum,
-    value.var = "n"
-  )
+    value.var = "nn"
+  ) %>% 
+  rename(N_missing = "NA")
+
+malli$N_exists <- rowSums(select(malli, Avo:Viistoperä))
+malli$N <- malli$N_exists + malli$N_missing
 
 # korityyppien osuus
-malli$N <-
-  select(malli,-merkki,-mallimerkinta,-malli,-`NA`) %>% rowSums
-malli$N.tot <-
-  select(malli,-merkki,-malli,-mallimerkinta,-N) %>% rowSums
 
-malli <- rename(malli, na = `NA`) %>%
-  mutate_at(names(select(malli, Avo:Viistoperä)), funs("p" = . / N)) %>%
-  mutate(ix = row_number())
-
-# Kerätään suhteelliset osuudet
-q <- select(malli, ends_with("_p"), ix) %>%
-  gather(., korityyppi, p, `Avo_p`:`Viistoperä_p`,-ix) %>%
-  group_by(ix) %>% arrange(-p) %>% dplyr::slice(1) %>%
+malli <- mutate_at(malli,
+  .vars = names(select(malli, Avo:Viistoperä)), 
+  .funs = funs("p" = . / N_exists)) %>%
+  mutate(row_index = row_number())
+  
+# Kerätään suhteelliset osuudet ja lasktetaan naivi voittaja
+q <- select(malli, ends_with("_p"), row_index) %>%
+  gather(., kori, p, `Avo_p`:`Viistoperä_p`, -row_index) %>%
+  group_by(row_index) %>% 
+  arrange(-p) %>% 
+  dplyr::slice(1) %>%
   mutate(
-    kori = gsub("_p$", "", korityyppi),
+    kori = gsub("_p$", "", kori),
     kori = ifelse(is.nan(p), NA, kori),
-    p = ifelse(is.nan(p), 0, p)
-  ) %>%
-  select(-korityyppi)
+    p = coalesce(p, 0)
+  )
 
-malli <- left_join(malli, q, by = "ix") %>%
-  mutate_at(vars(ends_with("_p")), function(x)
-    ifelse(is.nan(x), 0, x))
+malli <- left_join(malli, q, by = "row_index")  %>%
+  mutate_at(vars(ends_with("_p")), function(x) coalesce(x,0))
 
-# Siivotaan mallimerkinnästä duplikaattistringejä yms.
+# Tehdään mallimerkinnästä key - string 
 malli <- mutate(
   malli,
-  key = mallimerkinta,
-  key = mapply(
-    function(x, y)
-      gsub(x, "", y, ignore.case = TRUE),
-    ifelse(is.na(merkki), "", merkki),
-    key,
-    USE.NAMES = FALSE
-  ),
-  key = mapply(
-    function(x, y)
-      gsub(x, "", y, ignore.case = TRUE),
-    ifelse(is.na(malli), "", malli),
-    key,
-    USE.NAMES = FALSE
-  ),
-  key = toupper(key)
+  key = toupper(paste(merkkiSelvakielinen, 
+                      kaupallinenNimi, 
+                      mallimerkinta))
 )
 
-# Merkki & Malli-info harvaksi numeeriseksi matriisiksi
-x = cast_sparse(
-  s.tab(
-    malli$ix,
-    paste(malli$merkki, malli$malli, malli$key),
-    N = malli$N.tot,
-    sep = " |-|,|\\)|\\("
-  ) %>%
-    rename(ix = id) %>%
-    left_join(., select(malli, ix, kori, p, merkki), by = "ix") %>%
-    mutate(word = as.character(word),
-           word = ifelse(is.na(word), "NA", word)),
-  ix,
-  word
-)
+# merkkiSelvakielinen & Malli-info harvaksi numeeriseksi matriisiksi
 
-
-# Lisätään numeeriset muuttujat (koko, massa)
-
-
-# Talteen 
-#save(file = "malliSparse.RData", x)
+x <- tidytext::unnest_tokens(select(malli, row_index, key), 
+                        word, 
+                        key, 
+                        token = "regex", 
+                        drop=TRUE, 
+                        to_lower=FALSE, 
+                        pattern = " |-|,|\\)|\\(|/") %>%
+  mutate(word = as.character(word)) %>%
+  filter(word != "") %>% 
+  count(row_index, word) %>% 
+  tidytext::cast_sparse(., row_index, word, n)
 
 ### opetus
 
-train.index <- !is.na(malli$kori)
+train.index <- !is.na(malli$kori) & malli$kori > 0.75 
 kori.label <- as.numeric(as.factor(malli$kori[train.index])) - 1
 N.class <- max(kori.label) + 1
 
 # poistetaan kaikkein harvinaisimmat sanat & tehdään malli
-x.relevant.colidx <- colSums(x) > 4
+x.relevant.colidx <- Matrix::colSums(x) >= 30 
 
 param <- list(
   "booster" = "gbtree", # tree
@@ -118,23 +95,24 @@ param <- list(
   "num_class" = N.class, # number of classes
   "eval_metric" = "merror", # evaluation metric
   "nthread" = 4,   # number of threads to be used
-  "max_depth" = 8, # maximum depth of tree
+  "max_depth" = 7, # maximum depth of tree
   "silent" = 0,
-  "eta" = 0.15, # step size shrinkage
-  "subsample" = 0.8   # part of data instances to grow tree
-  #"colsample_bytree" = 1,  # subsample ratio of columns when constructing each tree
-  #"min_child_weight" = 0.1  # minimum sum of instance weight needed in a child
+  "eta" = .3, # step size shrinkage
+  "subsample" = .9,   # part of data instances to grow tree
+  "lambda" = 1,
+  "alpha" = 1,
+  #"colsample_bytree" = .5,  # subsample ratio of columns when constructing each tree
+  "min_child_weight" = 1  # minimum sum of instance weight needed in a child
 )
 
-#xgb.cv(param = param,
-#       data = x[train.index, x.relevant.colidx],
-#       label = kori.label,
-#       sample_weight = malli$N[train.index],
-#       nrounds = 55,
-#       prediction = TRUE,
-#       early_stopping_rounds = 3,
-#       verbose = TRUE, nfold=7, stratified=TRUE)
-
+xgb.cv(param = param,
+       data = x[train.index, x.relevant.colidx],
+       label = kori.label,
+       sample_weight = malli$N[train.index],
+       nrounds = 150,
+       prediction = TRUE,
+       early_stopping_rounds = 3,
+       verbose = TRUE, nfold = 5, stratified=TRUE)
 
 malli.kori <- xgboost(
   param = param,
@@ -146,7 +124,7 @@ malli.kori <- xgboost(
   verbose = TRUE
 )
 
-# 
+# estimoi malli
 p.est <- predict(malli.kori, x[, x.relevant.colidx]) %>%
   matrix(., nrow = N.class, ncol = length(.) / N.class) %>%
   t(.)
@@ -155,8 +133,8 @@ p.est <- predict(malli.kori, x[, x.relevant.colidx]) %>%
 malli$kori.tree <- levels(as.factor(malli$kori))[max.col(p.est)]
 malli$p.kori.tree <- apply(p.est, 1, max)
 
-kori.korjaus <- select(malli,-ends_with("_p"),-ix,-N,-key) %>%
-  rename(Puuttuu = na,
+kori.korjaus <- select(malli, -ends_with("_p"), -row_index) %>%
+  rename(
          p.kori.nn = p,
          kori.nn = kori)
 
@@ -164,7 +142,7 @@ kori.korjaus <- select(malli,-ends_with("_p"),-ix,-N,-key) %>%
 
 write.table(
   kori.korjaus,
-  file = full.path("korikorjaus.csv"),
+  file = here::here("Data", "korikorjaus.csv"),
   quote = FALSE,
   sep = "\t",
   row.names = FALSE,

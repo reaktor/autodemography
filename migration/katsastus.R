@@ -1,47 +1,40 @@
 # Data 
 # Data alunperin http://www.trafi.fi/tietopalvelut/avoin_data
 
-source("initTrafi.R")
-
-# Ajetaan merkkien/mallien korjaustiedosto!! luodaan skriptillä createMallitMerkitkorjaus.R
-# (Voidaan editoida käsin)
-
-# Henkilöautot
-henkiloauto <- tbl(trafi.db, "henkiloauto_uniqcombos") %>% 
-  select(combo, 
-         kayttoonottopvm, 
-         ensirekisterointipvm) %>% 
-  collect(n = Inf) 
-         
 ## pseudotietue
 # Autojen oletettu historia - erotukset matkamittarilukemien välillä; 
 # Onko auton matkamittarilukema muuttunut = "katsastettu"
 
-henkiloauto.historia <- tbl(trafi.db, "henkiloauto_historia") %>% 
-  filter(!is.na(record.id)) %>% 
-  arrange(record.id, data) %>% 
-  collect(n = Inf)
 
-henkiloauto.historia <-   
-  mutate(henkiloauto.historia, 
-         data = factor(data)) %>% 
-  group_by(record.id) %>% 
-  mutate(
-         km.diff = matkamittarilukema - lag(matkamittarilukema),
-         data.seuraava = lead(as.numeric(data)) - as.numeric(data),
-         katsastettu = nvl(nvl(matkamittarilukema.orig) != lag(nvl(matkamittarilukema.orig))),
-         kunta.seuraava = lead(kunta),
-         alue.seuraava = lead(alue),
-         ajoneuvonkaytto.seuraava = lead(ajoneuvonkaytto)
-         ) %>% 
-  ungroup %>%
-  left_join(., henkiloauto, by = "combo")
+Historia_ <- tbl(trafi.db$con, "autohistoria") %>% filter(substr(record_id, 13, 13) == "1") %>% collect
+
+
+Historia <- Historia_
+
+Historia<-  Historia %>%
+  #select(combination_id, record_id, date, data, matkamittarilukema) %>% 
+  #collect %>%
+  mutate(km = fix.matkamittarilukema(matkamittarilukema), 
+         km = ifelse(data == "5.03", NA, km)) %>%
+  left_join(., tbl(trafi.db$con, "autotiedot") %>% 
+              select(combination_id, kayttoonottopvm) %>% 
+              collect, 
+            by="combination_id") %>%
+  filter(!is.na(record_id)) %>% 
+  group_by(record_id) %>% 
+  arrange(data) %>% 
+  mutate(km_diff = km - lag(km),
+         katsastettu = ifelse(km != lag(km), T, F), 
+         max.jdiff = max(abs(jarnro - lag(jarnro, order.by = jarnro)), na.rm=TRUE),
+         max.jdiff = ifelse(max.jdiff < 0, 0, max.jdiff),
+         diffs_neg = any(km_diff < 0),
+         diffs_large = any(km_diff > 400000)) %>% 
+  ungroup
 
 # Katsastuskvartaali käyttöönottopäivän perusteella
-henkiloauto.historia$katsastus.Q <- 
-  katsastus.Q(henkiloauto.historia$date, henkiloauto.historia$kayttoonottopvm) 
-
-# 
+Historia$default_katsastus_kvartaali = map.default.katsastus.kvartaali(Historia$date, Historia$kayttoonottopvm)
+         
+Historia <- mutate(negatiivinen = km.diff<0)
 matkamittarilukemat <- 
   filter(henkiloauto.historia, !is.na(km.diff) & km.diff > 0) %>%
   group_by(., record.id, matkamittarilukema) %>% 
@@ -53,7 +46,7 @@ henkiloauto.historia <-
                    record.id, 
                    matkamittari.date, 
                    matkamittarilukema),
-            by=c("record.id","matkamittarilukema")) 
+            by=c("record.id", "matkamittarilukema")) 
 
 # Merkitään autot, joilla negatiivinen kilometrimäärä kahden kerran välissä 
 # max.jdiff mittaa kuika paljon järjestysnumero kannassa on muuttunut. Suuri erotus tuntuu usein kielivän 
@@ -65,8 +58,8 @@ outlier <- filter(ungroup(henkiloauto.historia), !is.na(record.id)) %>%
   group_by(record.id) %>% 
   summarise(
     N=n(),
-    negatiivinen = sum(km.diff < 0, na.rm=TRUE), 
-    max.jdiff = max(abs(jarnro - lag(jarnro, order.by=jarnro)), na.rm=TRUE),
+    negatiivinen = sum(km.diff < 0, na.rm = TRUE), 
+    max.jdiff = max(abs(jarnro - lag(jarnro, order.by = jarnro)), na.rm=TRUE),
     max.jdiff = ifelse(max.jdiff < 0, 0, max.jdiff)
   ) %>%
   ungroup 
@@ -77,7 +70,7 @@ if (FALSE) henkiloauto.historia <- mutate(henkiloauto.historia, record.id=ifelse
 
 # Merkitään onko matkamittarilukeman ajankohta päätelty käyttöönottopvm vai matkamittarilukeman muuttumisen perusteella
 henkiloauto.historia <- mutate(henkiloauto.historia, 
-                               matkamittari.date.laatu = ifelse(is.na(matkamittari.date), "oletus", "km.diff"),
+                               matkamittari.date.laatu = ifelse(is.na(matkamittari.date), "default", "km.diff"),
                                matkamittari.date = ifelse(is.na(matkamittari.date), katsastus.Q, matkamittari.date)) %>% 
   left_join(., select(outlier, record.id, negatiivinen, max.jdiff), by="record.id") 
 
@@ -135,9 +128,9 @@ henkiloauto.historia<-left_join(henkiloauto.historia,
                                        km.diff.vuosi),
                                 by=c("record.id","data"))
 
-# Merkitään autot joilla ajettu keskimäärin yli 300000km tai 300000km "edellisen vuoden aikana"
+# Merkitään autot joilla ajettu keskimäärin yli 400 000km tai 400 000km "edellisen vuoden aikana"
 henkiloauto.historia <- group_by(henkiloauto.historia, record.id) %>%
-  mutate(suuri = sum(ifelse(nvl(km.diff.vuosi)> 300000 | nvl(km.per.kayttovuosi) > 300000, 1, 0))) %>% 
+  mutate(suuri = sum(ifelse(nvl(km.diff.vuosi) > 400000 | nvl(km.per.kayttovuosi) > 400000, 1, 0))) %>% 
   ungroup
 
 # Poistetaan km-määrät autoilta joilla on epäilyttävän suuria ajomääriä tai negat. lukemia
@@ -179,7 +172,7 @@ H <- mutate(
   H, 
   N = 1,
   katsastettu = 0,
-  matkamittari.date.laatu = "oletus",
+  matkamittari.date.laatu = "default",
   matkamittari.date = katsastus.Q,
   kayttovuodet.matkamittari = as.numeric(interval(ymd(kayttoonottopvm), ymd(matkamittari.date)) / years(1)),
   kayttovuodet = as.numeric(interval(ymd(kayttoonottopvm), ymd(date)) / years(1)),

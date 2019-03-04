@@ -20,7 +20,7 @@ library(ggiraph)
 
 ##
 
-trafi.db<- src_sqlite(paste(working.directory,"/trafi.db",sep=""), create=FALSE)
+trafi.db<- src_sqlite(paste(working.directory, "/trafi.db",sep=""), create=FALSE)
 
 #group_by(henkiloauto.historia %>% filter(ajoneuvonkaytto=="Yksityinen"), data, kuntanimi) %>% summarise(uusi=sum(rekisterivuodet<=0.25,na.rm=TRUE), N=n()) %>% ungroup %>% transmute(alue=kuntanimi, uusi=uusi/N, data) 
 #kartta(filter(i, !is.ahvenanmaa(alue) & data=="4.02"), aluejako="kartogrammi.kuntanimi", color.map="BrBG")
@@ -43,7 +43,7 @@ henkiloauto <- tbl(trafi.db,"henkiloauto_uniqcombos") %>%
 #quantile(.,c(.95,.99,1), na.rm=TRUE)
 #mean(abs(henkiloauto$Co2.orig-henkiloauto$Co2.modelled),na.rm=TRUE)
 
-henkiloauto.historia <-tbl(trafi.db,"henkiloauto_historia_diff") %>% 
+henkiloauto.historia <-tbl(trafi.db, "henkiloauto_historia_diff") %>% 
   select(-km.diff) %>%
   collect(n=Inf) 
 

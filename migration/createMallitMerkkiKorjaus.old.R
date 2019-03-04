@@ -4,7 +4,7 @@
 
 # otatan vain henkilöautot
 
-source("initTrafi.R")
+#source("initTrafi.R")
 
 autot <- tbl(trafi.db, "autotiedot") %>%
   select(
@@ -13,9 +13,20 @@ autot <- tbl(trafi.db, "autotiedot") %>%
     kaupallinenNimi,
     ajoneuvoryhma,
     korityyppi,
-    N.combinations
+    N.id = N.combinations
   ) %>%
   collect(n = Inf)
+
+# koodataan uudestaan malleja
+auto.merkit <-
+  transmute(
+    autot,
+    merkki = merkkiSelvakielinen,
+    kori = korityyppi,
+    malli = mallimerkinta,
+    malli.lyh = kaupallinenNimi,
+    N = N.id
+  )
 
 ## Skriptillä tuotetaan pohja korjaustaulukoksi; korjaa tyypillismmät kirjoitusvirheet jne.
 ## Lopullinen taulukko voidaan editoida käsin!!
@@ -23,13 +34,13 @@ autot <- tbl(trafi.db, "autotiedot") %>%
 # Haetaan uniikit orig merkit ja niiden määrät
 # Korjataa merkkejä aluksi erilaisilla regexpeillä...
 
-merkit <- group_by(autot, merkkiSelvakielinen) %>%
-  summarise(N.orig = sum(N.combinations)) %>%
-  select(N.orig, merkkiSelvakielinen)
+merkit <- group_by(auto.merkit, merkki) %>%
+  summarise(N.orig = sum(N)) %>%
+  select(N.orig, merkki.orig = merkki)
 
 merkit <- merkit %>%
   mutate(
-    merkki.korjattu = toupper(merkkiSelvakielinen),
+    merkki.korjattu = toupper(merkki.orig),
     merkki.korjattu = gsub("\\+|/", "-", merkki.korjattu),
     merkki.korjattu = gsub("\\.|,", "", merkki.korjattu),
     merkki.korjattu = gsub("[[:space:]]+", " ", merkki.korjattu),
@@ -106,26 +117,39 @@ merkit <- merkit %>%
     blank = str_count(merkki.korjattu, "[[:space:]]"), # lasketaan blankien määrää; ks. kohta
     merkki.korjattu = iconv(merkki.korjattu, to = "UTF-8"),
     key = iconv(key, to = "UTF-8")
-  )  %>% 
-  ungroup 
+  ) %>%
+  arrange(key, blank) %>%
+  group_by(key) %>%
+  mutate(N = sum(N.orig))
 
-# merkkiSelvakielinen = alkuperäinen merkkinimi, merkki.korjattu=yhtenäistetty merkkinimi
+# orig = alkuperäinen merkkinimi, merkki.korjattu=yhtenäistetty merkkinimi
 # tällä systeemillä otetaan duplikaateista mukaan ne joissa on vähiten tyhjiä =>
 # esim. otetaan mukaan merkkijono jossa on väliviiva, jos sellainen asu löytyy
+
 # !!tämä voi tehdä ainkain seuraavan virheen: jos on automerkit joissa ero on välilyönnin tai esim. yhdysviivan paikka,
 # nämä niputtuvat samaan esim.: La Paz = Lap Az
 
-merkit.fix <- merkit %>% 
-  group_by(key) %>% 
-  arrange(key, blank) %>%
-  dplyr::slice(1) %>% 
-  ungroup %>%
+merkit.stat <- merkit %>%
+  dplyr::slice(1) %>% ungroup %>%
   select(key, merkki.korjattu) %>%
   merge(select(merkit, -merkki.korjattu), ., by = "key") %>%
-  select(., -key, -blank) 
+  select(., -key, -blank) %>%
+  rename(N.korjattu = N)
+
+#Yksinkertainen merkkitaulukko kantaan ja fileen
 
 if (db_has_table(trafi.db$con, "merkitmap")) db_drop_table(trafi.db$con, "merkitmap")
-merkit.fix %>% db_insert_into(trafi.db$con, "merkitmap", .)
+merkit.stat %>% db_insert_into(trafi.db$con, "merkitmap", .)
+
+write.table(
+  merkit.stat,
+  file = full.path("merkitmap.csv"),
+  quote = FALSE,
+  sep = ";",
+  row.names = FALSE,
+  fileEncoding = "UTF-8",
+  append = FALSE
+)
 
 
 ## Korjataan merkit; aloitetaan mallien korjaaminen
@@ -133,8 +157,8 @@ autot <- mutate(
   autot,
   merkki = plyr::mapvalues(
     merkkiSelvakielinen,
-    merkit.fix$merkkiSelvakielinen,
-    merkit.fix$merkki.korjattu
+    merkit.stat$merkki.orig,
+    merkit.stat$merkki.korjattu
   ),
   k.malli = toupper(kaupallinenNimi),
   malli = toupper(mallimerkinta))
@@ -179,9 +203,9 @@ mallit <- group_by(autot,
                    malli, 
                    kaupallinenNimi, 
                    mallimerkinta) %>% 
-  summarise(N = sum(N)) %>% 
+  summarise(n = sum(N.id)) %>% 
   ungroup %>% 
-  filter(ajoneuvoryhma %in% c(NA, 'Maastohenkilöauto'))
+  filter(ajoneuvoryhma %in% c(NA, 'Maastohenkilöauto' ))
 
 # Poista merkki mallinimistä #####
 
@@ -200,33 +224,277 @@ mallit$malli <-
     USE.NAMES = FALSE)
 
 
-source(here::here("migration","cleansemodel.R"))
+# korvaa kuten gsub mutta ei jos pattern on alussa
+hsub <- function(pattern, subst, target)
+  ifelse(grepl(paste("^", pattern, sep = ""), target), target, gsub(pattern, subst, target))
+
+# poista turhat välimerkki + space -yhdistelmät ja suluissa olevat
+clear <- function(txt) {
+  txt <- gsub(",", ".", txt)
+  txt <- gsub("\\(.*\\)", " ", txt)
+  txt <- gsub("[\\(|\\)|\\{|\\}]", " ", txt)
+  txt <- gsub("[^\\.[:^punct:]]", "-", txt, perl = TRUE)
+  txt <- gsub("[[:space:]]+", " ", txt)
+  txt <- gsub("[[:space:]]+-+", " -", txt)
+  txt <- gsub("-+[[:space:]]*", "-", txt)
+  txt <- gsub("([[:space:]]|-|\\.)*(\\.)+([[:space:]]|-|\\.)*", ".", txt)
+  txt <- gsub("^[[:punct:]|[:space:]]*", "", txt)
+  txt <- gsub("[[:punct:]|[:space:]]*$", "", txt)
+  txt <- gsub("[[:space:]]+", " ", txt)
+  return(txt)
+}
+
+# Korjaa mallimerkintä, poistetaan ylimääräistä tekstiä
+
+puhdista.malli <- function(merkki, malli) {
+
+  malli <- clear(malli)
+  
+  # poistetaan "desimaaliluvuista eteenpäin loppuun 1.5 2.0GL  jne
+  #malli <- gsub("\\b[1-9]\\.[0-9][[:alnum:]]*\\b", " ", malli)
+  malli <- gsub("[0-9]\\.[0-9].*$", "", malli)
+  
+  # Volkswagen auki, alussa tai keskellä oleva ovisuus (esim. 4D, 4OV) pois, kuutiot pois
+  malli <- ifelse(merkki == "VOLKSWAGEN", gsub("VW", " ", malli), malli)
+  malli <- gsub("^[0-9]D|^[0-9] D|[ |-][0-9]D\\b", "", malli)
+  malli <- gsub("[0-9]OV$|[0-9]OV\\W|[0-9]DR", " ", malli)
+  malli <- gsub("[0-9]{3,4}CM3.*$", " ", malli)
+  
+  malli <- clear(malli)
+  
+  # Venttiilit pois
+  malli <- gsub("\\b(16V|8V|24V|20V|V8|V6|V12)\\b", " ", malli)
+  
+  malli <- clear(malli)
+
+  # muutamia lisämääreitä, esim. koriin, nelivetoon ja polttoaineeseen liittyen pois
+  
+  remove.strs <- c(
+    "SEDAN",
+    "4DSEDAN",
+    "HATCHBACK",
+    "HATCBACK",
+    "FASTBACK",
+    "NOTCHBACK",
+    "FARMARI",
+    "LIFTBACK",
+    "COUPE",
+    "COUPÉ",
+    "STW",
+    "CA.RIOLET",
+    "CABRIO",
+    "AVOAUTO",
+    "MATKAILUAUTO",
+    "VIISTOPERÄ",
+    "MONIKÄYTTÖAJONEUVO",
+    "UMPIKORINEN",
+    "UMPI/AVO",
+    "YKSIKERROKSINEN",
+    "STATION WAGON",
+    "SPORTWAGON",
+    "SPORTSWAGON",
+    "WAGON",
+    "CARAVAN",
+    "HARDTOP",
+    "CONVERTIBLE",
+    "TOURING",
+    "TOURER",
+    "SPORTBACK",
+    "ERIKOISKÄYTTÖÖN",
+    "MPV",
+    "AJONEUVOT",
+    "AVOLAVAKUORMA",
+    "LIMOUSINE",
+    "AUTOM",
+    "AUTOMA",
+    "AUTOMAT",
+    "AUTOMATI",
+    "AUTOMATIC",
+    "TIPTRONIC",
+    "SPORTS?",
+    "TURBO",
+    "TURBODIESEL",
+    "AWD",
+    "4WD",
+    "SERIES",
+    "4X4",
+    "SYNCRO",
+    "X-?DRIVE",
+    "4-?MATIC",
+    "4-?MOTION",
+    "ALLROAD",
+    "HYBRID",
+    "PLUG[-| ]?IN",
+    "BLUETEC",
+    "AVANT",
+    "COMBI",
+    "CLASSIC",
+    "VARIANT",
+    "BIFUEL",
+    "DIESEL",
+    "KOMPRESSOR")
+  
+  malli<- gsub(paste0("\\b", paste0(remove.strs, collapse=".*$|\\b"), ".*$"), "", malli)
+  malli <- clear(malli)
+  
+  # Poistetaan pattern jossa enemmän kuin yksi väliviiva
+  
+  malli <- gsub(" .*-.*-.*$", "", malli)
+  
+  #malli <- ifelse(malli %in% c("FOCUS C-MAX", "GRAND C-MAX"), malli, hsub("(-| )[[:alnum:]|\\.]+-[[:alnum:]]+-[[:alnum:]]+\\b", " ", malli))
+  #malli <- clear(malli)
+  
+  #malli <- ifelse(malli %in% c("FOCUS C-MAX", "GRAND C-MAX"), malli, hsub("(-| )[[:alnum:]|\\.]+-[[:alnum:]]+\\b", " ", malli))
+  #malli <- clear(malli)
+  
+  #malli <- ifelse(malli %in% c("FOCUS C-MAX", "GRAND C-MAX"), malli, str_match(malli, "^[0-9]+[[:punct:]][[:alnum:]]+|^[0-9]+|^[[:alnum:]]+[[:space:]|[:punct:]]*[[:alnum:]]*"))
+  #malli <- clear(malli)
+  
+  #malli <- ifelse(malli %in% c("FOCUS C-MAX", "GRAND C-MAX"), malli, str_match(malli, "^[0-9]+[[:punct:]][[:alnum:]]+|^[0-9]+|^[[:alnum:]]+[[:space:]|[:punct:]]*[[:alnum:]]*"))
+  #malli <- clear(malli)
+  
+
+  
+    # poistetaan "desimaaliluvuista eteenpäin loppuun 1.5 2.0GL  jne
+  #malli <- gsub("\\b[1-9]\\.[0-9][[:alnum:]]*\\b", " ", malli)
+  #malli <- gsub("[0-9]\\.[0-9].*$", "", malli)
+  malli <- clear(malli)
+  
+  # poistetaan GT, GTX yms. tyyppisiä sanoja merkintöjä stringin lopusta
+  if(FALSE) {
+  malli <-
+    gsub(
+      "\\bXLI$|
+      \\bXSI$|
+      [^^|\\b]CC$|
+      [^^|\\b]GT$|
+      \\bGTI$|
+      \\bSE$|
+      \\bHT$|
+      \\bAUT$|
+      \\bGL$|
+      \\bTD$|
+      \\bUNLIMITED$|
+      \\bLIMITED$|
+      \\bDE$|
+      \\bHB$|
+      \\bLS$|
+      \\bSL$|
+      \\bVAN$|
+      \\bCNG$|
+      \\bCAB$|
+      \\bLE$|
+      \\bLX$|
+      \\bRS$|
+      \\bDOOR$|
+      \\bSC$|
+      \\bTC$|
+      \\bTDI$|
+      \\bCDI$|
+      \\bTS$|
+      \\bAT$|
+      \\bBUSINESS$|
+      \\bEDITION$|
+      \\bES$|
+      \\bGLS$|
+      \\bGLX$|
+      \\bGS$|
+      \\bGTS$|
+      \\bSTATION$|
+      \\bXL$|
+      \\b2DHT$|
+      \\bDL$|
+      \\bMODEL$|
+      \\bCS$|
+      \\bGX$|
+      \\bHD$|
+      \\bSD$|
+      \\bCL$|
+      \\bFSI$|
+      \\bGLI$|
+      \\bGSI$|
+      \\bGTC$|
+      \\bGTX$|
+      \\bLT$|
+      \\bML$|
+      \\bSLS$|
+      \\bSV$|
+      \\bSW$|
+      \\bSX$|
+      \\bTB$|
+      \\bTCI$|
+      \\bXR$|
+      \\bAVO$|
+      \\bCDI$|
+      \\bCDTI$|
+      \\bCI$|
+      \\bCJ$|
+      \\bCNG$|
+      \\bCRDI$|
+      \\bCUOPE$|
+      \\bDB$|
+      \\bDI$|
+      \\bDPF$|
+      \\bDT$|
+      \\bDTS$|
+      \\bDX$|
+      \\bEX$|
+      \\bFX$|
+      \\bGF$|
+      \\bGTE$|
+      \\bGTA$|
+      \\bHDI$|
+      \\bIS$|
+      \\bLD$|
+      \\bTFSI$",
+      " ",
+      malli
+    )}
+  
+  # poistetaan muutamia merkkikohtaisia stringejä
+  malli <- ifelse(merkki == "OPEL", gsub("-.*$|STATION|SW|NOTCHBACK|GTC|NB", " ", malli), malli)
+  malli <- ifelse(merkki == "ALFA ROMEO", gsub("ALFA", " ", malli), malli)
+  malli <- ifelse(merkki == "PEUGEOT", gsub("FAMILIAL|BREAK", " ", malli), malli)
+  malli <- ifelse(merkki == "BMW", gsub("(X|S)DRIVE.*$|ACTIVEHYBRID", "", malli),
+           malli)
+  malli <-
+    ifelse(merkki == "VOLKSWAGEN", gsub("\\bSPORTSVAN\\b", " ", malli), malli)
+  malli <- ifelse(merkki == "VOLVO", gsub("CROSS COUNTRY", " ", malli), malli)
+  malli <- ifelse(merkki == "AUDI", gsub("SPORTBACK", " ", malli), malli)
+  malli <- ifelse(merkki == "HONDA", gsub("AERODECK", " ", malli), malli)
+  malli <- ifelse(merkki == "MERCEDES-BENZ", gsub("KOMBI", " ", malli), malli)
+  malli <-
+    ifelse(merkki == "SAAB",
+      gsub(
+        "VECTOR.*$|SPORTCOM.*$|SPORT|LINEAR.*$|AERO.*$|CD.*$|CSE.*$|SE.*$|ESTATE.*$", " ", malli), malli
+    )
+  
+  malli <- ifelse(merkki == "MITSUBISHI", gsub("EVOLUTION.*$|STAR", " ", malli), malli)
+  malli <- ifelse(merkki == "GAZ", gsub("WOLGA", "VOLGA",  malli), malli)
+  malli <- ifelse(merkki == "GAZ", gsub("POPEDA", "POBEBDA", malli), malli)
+  malli <- ifelse(merkki == "GAZ", gsub("TSHAIKA", "TSAIKA", malli), malli)
+  malli <- clear(malli)
+  
+  malli <- gsub(" -.*$","",malli)
+  malli <- clear(malli)
+  
+  return(malli)
+}
+
 ####  Siivotaan mallit
 #
   
 ## Korjataan mallit ja tehdään niistä "key" = välilyönnit pois...
 
-Mallit <- mutate(mallit,
-                 k.malli = puhdista.malli(merkki, k.malli),
-                 k.malli.key = gsub("[[:space:]]", "", k.malli),
-                 malli.key = gsub("[[:space:]]", "", malli),
-                 k.malli.key = ifelse(k.malli.key == "" | is.na(k.malli.key), malli.key, k.malli.key),
-                 key = k.malli.key,
-                 k.malli = ifelse(k.malli == "" | is.na(k.malli), NA, k.malli)
+mallit <- mutate(mallit,
+  k.malli = puhdista.malli(merkki, k.malli),
+  #malli = puhdista.malli(merkki, malli),
+  k.malli.key = gsub("[[:space:]]", "", k.malli),
+  malli.key = gsub("[[:space:]]", "", malli),
+  k.malli.key = ifelse(k.malli.key == "" | is.na(k.malli.key), malli.key, k.malli.key),
+  key = k.malli.key,
+  k.malli = ifelse(k.malli == "" | is.na(k.malli), NA, k.malli)
 )
-
-
-
-Mallit <- mutate(mallit,
-                 k.malli = puhdista.malli(merkki, k.malli),
-                 malli = puhdista.malli(merkki, malli),
-                 k.malli.key = gsub("[[:space:]]", "", k.malli),
-                 malli.key = gsub("[[:space:]]", "", malli),
-                 k.malli.key = ifelse(k.malli.key == "" | is.na(k.malli.key), malli.key, k.malli.key),
-                 key = k.malli.key,
-                 k.malli = ifelse(k.malli == "" | is.na(k.malli), NA, k.malli)
-)
-
 
 # Haetaan yleisiä malleja jäljellejääneestä tavarasta...
 
@@ -298,8 +566,7 @@ mallit.merkki.korjaus <-
 autot <- select(autot, -k.malli)
 autot <- left_join(autot, mallit.merkki.korjaus, by = c("merkki", "kaupallinenNimi", "mallimerkinta"))
 
-korjaus <- count(autot, merkkiSelvakielinen, mallimerkinta, kaupallinenNimi, merkki, k.malli) %>% 
-  ungroup
+korjaus <- count(autot, merkkiSelvakielinen, mallimerkinta, kaupallinenNimi, merkki, k.malli) %>% ungroup
 
 #korjaus.bak <- korjaus
 ### Korjataan yleisimpiä detaljeja
